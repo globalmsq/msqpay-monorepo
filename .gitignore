@@ -47,3 +47,148 @@ subgraph/generated/
 # Misc
 *.tsbuildinfo
 .turbo/
+.AppleDouble
+*.backup
+.claude/skills/*/*/*token*
+*_token=*
+.moai/learning/
+.directory
+.moai/scripts/sync-*.sh
+# Virtual Environments
+*.dbm
+# Logs & Temporary Files
+.fseventsd
+.uv-cache/
+# OS Files
+# Claude Code Local Configuration
+# Claude Code Skills Secrets
+.claude/local/
+*.rdb
+!.moai/scripts/
+.moai/work/
+*.egg-info/
+# Linux
+.uv_cache/
+.LSOverride
+.Spotlight-V100
+# IDE & Editors
+.moai/analytics/
+*.p12
+.claude/skills/*/*/*key*
+.#*
+.netlify/
+*.key
+.moai-backups/
+# MoAI Directory Management
+*-backup/
+.moai/reports/
+.moai/*
+# Purpose: Essential patterns for user projects
+.claude/.env.local*
+ehthumbs.db
+# Version: 0.28.0
+.vercel/
+# Add to .gitignore if needed per project
+# Node.js (for docs/Nextra)
+# Build Artifacts
+.moai/scripts/phase*.sh
+__pycache__/
+.mypy_cache/
+*.sqlite3
+.VolumeIcon.icns
+*.suo
+.moai/docs/
+.claude/settings.local.json
+.Trashes
+# .moai local development scripts (not distributed)
+logs/
+*.pyd
+*.pem
+# User-generated content: logs/, cache/, reports/, etc.
+.moai/scripts/*sync*.sh
+.claude/settings.local.*.json
+*.egg
+.aws/config
+.env/
+# Backups
+.cursor/
+# MoAI-ADK Package Distribution .gitignore
+*.tmp
+*.backup/
+htmlcov/
+.venv/
+*secret*
+.ruff_cache/
+# Windows
+# Environment Variables & Secrets
+*.njsproj
+.aws/credentials
+*.pyo
+.claude/skills/*/secrets/
+.claude/skills/*/*/*secret*
+# Test Coverage
+.moai/backups/
+.moai/scripts/phase*.py
+.moai/error_logs/
+# ---------------------------------------------
+*.db
+*.pyc
+*.bak
+# Package Distribution
+.moai/temp/
+!.moai/memory/
+!.env.example
+*.temp
+!.moai/specs/**
+.moai/scripts/__pycache__/
+!.moai/memory/**
+.github/workflows/*.yml.bak
+.moai/scripts/sync-*.py
+*~
+*.sw?
+*.sublime-workspace
+venv/
+# uv.lock
+.gitlab-ci.yml.bak
+.TemporaryItems
+*.sqlite
+.moai/archived-skills/
+.DocumentRevisions-V100
+.moai/logs/
+*key*
+!.moai/config/**
+# uv.lock is intentionally included for reproducible builds
+# Tracked in git: config/, memory/, scripts/, specs/
+[Dd]esktop.ini
+!.moai/specs/
+.moai/cache/
+# .moai local-only directories (user projects only)
+# ============================================
+*.sln
+.tscache/
+*.pfx
+.moai/indexes/
+.firebase/
+.moai/archive/
+# CI/CD
+env/
+# Python Cache & Database
+*.jks
+.claude/skills/*/.env*
+*_backup_*/
+!.moai/scripts/**
+.pytest_cache/
+.env.*
+*.sublime-project
+*_secret=*
+# Mac
+!.moai/config/
+.coverage
+
+# Claude Code
+.claude/
+CLAUDE.md
+.mcp.json
+
+# Moai
+.moai/

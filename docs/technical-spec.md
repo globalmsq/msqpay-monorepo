@@ -2,348 +2,80 @@
 ## MSQ Pay Onchain - Implementation Details
 
 ### Document Information
-- **Version**: 1.0
-- **Date**: 2025-11-27
-- **Status**: Approved
+- **Version**: 0.1
+- **Date**: 2025-11-26
+- **Status**: Draft
 
 ---
 
-## 1. 시스템 아키텍처
+## 1. Smart Contract Architecture
 
-### 1.1 전체 구성
-
-```mermaid
-flowchart TB
-    subgraph Client["클라이언트"]
-        Frontend[프론트엔드]
-        Metamask[Metamask]
-    end
-
-    subgraph Store["상점"]
-        StoreServer[상점서버<br/>SDK]
-    end
-
-    subgraph Payment["결제 시스템"]
-        PaymentServer[결제서버<br/>API]
-        OZRelay[OZ Defender Relay]
-    end
-
-    subgraph Blockchain["블록체인"]
-        Contract[PaymentGateway<br/>Source of Truth]
-    end
-
-    Frontend --> StoreServer
-    Frontend --> Metamask
-    Metamask -->|Direct TX| Contract
-    StoreServer -->|API Key 인증| PaymentServer
-    PaymentServer --> OZRelay
-    OZRelay -->|Gasless Relay| Contract
-    PaymentServer -->|상태 조회| Contract
-```
-
-### 1.2 MVP 특징
-
-- **Stateless**: DB/Redis 없음
-- **Contract = Source of Truth**: 결제 상태는 Contract에서 직접 조회
-- **동일 API 인터페이스**: MVP와 Production 간 호환
-
----
-
-## 2. 결제서버 API
-
-### 2.1 인증
-
-모든 API 요청에 API Key 필요:
+### 1.1 Contract Overview
 
 ```
-Headers:
-  x-api-key: sk_test_abc123
+┌─────────────────────────────────────────────────────────────┐
+│                      ERC1967Proxy                           │
+│                   (PaymentGateway Proxy)                    │
+├─────────────────────────────────────────────────────────────┤
+│  Implementation: PaymentGatewayV1                           │
+│  Admin: Owner (upgrade authority)                           │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    PaymentGatewayV1                         │
+├─────────────────────────────────────────────────────────────┤
+│  Inherits:                                                  │
+│  - UUPSUpgradeable                                         │
+│  - OwnableUpgradeable                                      │
+│  - ERC2771ContextUpgradeable                               │
+│  - ReentrancyGuardUpgradeable                              │
+├─────────────────────────────────────────────────────────────┤
+│  State Variables:                                           │
+│  - processedPayments: mapping(bytes32 => bool)             │
+│  - supportedTokens: mapping(address => bool)               │
+│  - enforceTokenWhitelist: bool                             │
+├─────────────────────────────────────────────────────────────┤
+│  Functions:                                                 │
+│  - constructor(trustedForwarder)                           │
+│  - initialize(owner)                                       │
+│  - pay(paymentId, token, amount, merchant)                 │
+│  - setSupportedToken(token, supported)                     │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 결제 생성
-
-```
-POST /payments/create
-```
-
-**Request**:
-```typescript
-{
-  orderId: string;        // 상점의 주문 ID
-  amount: string;         // 결제 금액 (wei 단위 문자열)
-  token: Address;         // 토큰 컨트랙트 주소
-  merchant: Address;      // 수취인 지갑 주소
-}
-```
-
-**Response**:
-```typescript
-{
-  paymentId: string;      // bytes32 hex string
-  orderId: string;
-  amount: string;
-  token: Address;
-  merchant: Address;
-  status: "pending";
-}
-```
-
-**MVP 동작**:
-- paymentId 생성 (keccak256 + randomBytes)
-- 응답 반환 (DB 저장 없음)
-
-**Production 동작**:
-- paymentId 생성
-- DB 저장
-- 응답 반환
-
-### 2.3 결제 상태 조회
-
-```
-GET /payments/:paymentId/status
-```
-
-**Response**:
-```typescript
-{
-  paymentId: string;
-  status: "pending" | "completed";
-}
-```
-
-**MVP 동작**:
-```typescript
-const isProcessed = await contract.read.processedPayments([paymentId]);
-return { paymentId, status: isProcessed ? 'completed' : 'pending' };
-```
-
-**Production 동작**:
-```typescript
-// DB에서 조회 + Contract 확인 + 금액 검증
-const dbPayment = await db.payments.findByPaymentId(paymentId);
-const isProcessed = await contract.read.processedPayments([paymentId]);
-// 추가 검증 로직...
-```
-
-### 2.4 Gasless 데이터 조회
-
-```
-GET /payments/:paymentId/gasless?userAddress=0x...
-```
-
-**Response**:
-```typescript
-{
-  nonce: string;
-  forwardRequest: {
-    from: Address;        // userAddress
-    to: Address;          // gateway 주소
-    value: "0";
-    gas: string;
-    nonce: string;
-    deadline: string;
-    data: string;         // encoded pay() call
-  };
-  typedData: {
-    domain: EIP712Domain;
-    types: EIP712Types;
-    primaryType: string;
-    message: ForwardRequest;
-  };
-}
-```
-
-**동작**:
-1. Forwarder Contract에서 nonce 조회
-2. ForwardRequest 구성
-3. EIP-712 typedData 생성
-4. 응답 반환
-
-### 2.5 Gasless 릴레이
-
-```
-POST /payments/:paymentId/relay
-```
-
-**Request**:
-```typescript
-{
-  signature: string;      // EIP-712 서명 (hex)
-  forwardRequest: {
-    from: Address;
-    to: Address;
-    value: string;
-    gas: string;
-    nonce: string;
-    deadline: string;
-    data: string;
-  };
-}
-```
-
-**Response**:
-```typescript
-{
-  txHash: string;
-  status: "submitted";
-}
-```
-
-**동작**:
-1. 서명 검증
-2. OZ Defender Relay 호출
-3. txHash 반환
-
----
-
-## 3. paymentId 생성
-
-### 3.1 알고리즘
-
-```typescript
-import { keccak256, toBytes, concat } from 'viem';
-import { randomBytes } from 'crypto';
-
-function generatePaymentId(storeId: string, orderId: string): `0x${string}` {
-  return keccak256(
-    concat([
-      toBytes(storeId),      // API Key에서 추출
-      toBytes(orderId),      // 상점서버 요청
-      randomBytes(32)        // 매번 다른 ID 보장
-    ])
-  );
-}
-```
-
-### 3.2 특징
-
-| 특징 | 설명 |
-|------|------|
-| 유일성 | randomBytes로 항상 다른 ID |
-| 상점 구분 | storeId 포함으로 상점간 충돌 방지 |
-| 추적성 | orderId 포함으로 주문 연결 가능 |
-| 서버 생성 | 클라이언트 조작 불가 |
-
----
-
-## 4. API Key 관리
-
-### 4.1 MVP: 환경변수
-
-```bash
-# .env
-STORE_API_KEYS='{
-  "sk_test_abc123": { "storeId": "store_001", "name": "Demo Store" },
-  "sk_test_def456": { "storeId": "store_002", "name": "Test Shop" }
-}'
-```
-
-```typescript
-function validateApiKey(apiKey: string): StoreInfo | null {
-  const stores = JSON.parse(process.env.STORE_API_KEYS || '{}');
-  return stores[apiKey] || null;
-}
-
-// 미들웨어
-function authMiddleware(req, res, next) {
-  const apiKey = req.headers['x-api-key'];
-  const store = validateApiKey(apiKey);
-
-  if (!store) {
-    return res.status(401).json({ error: 'Invalid API Key' });
-  }
-
-  req.store = store;
-  next();
-}
-```
-
-### 4.2 Production: DB
-
-```sql
-CREATE TABLE stores (
-  id VARCHAR(36) PRIMARY KEY,
-  api_key VARCHAR(64) UNIQUE NOT NULL,
-  name VARCHAR(255) NOT NULL,
-  webhook_url VARCHAR(512),
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_stores_api_key ON stores(api_key);
-```
-
-### 4.3 API Key 형식
-
-```
-sk_test_[random32chars]  -- 테스트용
-sk_live_[random32chars]  -- 프로덕션용
-```
-
-```typescript
-import { randomBytes } from 'crypto';
-
-function generateApiKey(isTest: boolean): string {
-  const prefix = isTest ? 'sk_test_' : 'sk_live_';
-  return prefix + randomBytes(16).toString('hex');
-}
-```
-
----
-
-## 5. Smart Contract
-
-### 5.1 Contract Overview
-
-```
-┌─────────────────────┐
-│   ERC1967Proxy      │
-│   (Upgradeable)     │
-└──────────┬──────────┘
-           │ delegates to
-           ▼
-┌─────────────────────┐
-│  PaymentGatewayV1   │
-│  - processedPayments│
-│  - supportedTokens  │
-│  - pay()            │
-└─────────────────────┘
-           │ inherits
-           ▼
-┌─────────────────────────────────────────┐
-│ UUPSUpgradeable                         │
-│ OwnableUpgradeable                      │
-│ ERC2771ContextUpgradeable               │
-│ ReentrancyGuardUpgradeable              │
-└─────────────────────────────────────────┘
-```
-
-### 5.2 Storage Layout
+### 1.2 Storage Layout
 
 ```solidity
+// Slot 0-49: Reserved for OpenZeppelin upgradeable contracts
+// Slot 50+: Custom storage
+
+// Storage slot calculation for UUPS
 contract PaymentGatewayV1Storage {
-    // 결제 완료 기록 (Source of Truth)
+    // Slot 50: processedPayments mapping
     mapping(bytes32 => bool) public processedPayments;
 
-    // 지원 토큰 목록
+    // Slot 51: supportedTokens mapping
     mapping(address => bool) public supportedTokens;
 
-    // 업그레이드용 gap
-    uint256[49] private __gap;
+    // Slot 52: enforceTokenWhitelist flag
+    bool public enforceTokenWhitelist;
+
+    // Gap for future upgrades (reserved slots 53-99)
+    uint256[47] private __gap;
 }
 ```
 
-### 5.3 Events
+### 1.3 Events
 
 ```solidity
 event PaymentCompleted(
-    bytes32 indexed paymentId,
-    address indexed payer,
-    address indexed merchant,
-    address token,
-    uint256 amount,
-    uint256 timestamp
+    bytes32 indexed paymentId,    // Unique payment identifier
+    address indexed payer,        // User who paid
+    address indexed merchant,     // Recipient
+    address token,                // ERC20 token address
+    uint256 amount,               // Amount in wei
+    uint256 timestamp             // Block timestamp
 );
 
 event TokenSupportChanged(
@@ -352,655 +84,635 @@ event TokenSupportChanged(
 );
 ```
 
-### 5.4 Core Function
+### 1.4 Payment ID Generation
 
-```solidity
-function pay(
-    bytes32 paymentId,
-    address token,
-    uint256 amount,
-    address merchant
-) external nonReentrant {
-    require(!processedPayments[paymentId], "Payment already processed");
-    require(supportedTokens[token], "Token not supported");
-    require(amount > 0, "Amount must be greater than 0");
-    require(merchant != address(0), "Invalid merchant");
-
-    processedPayments[paymentId] = true;
-
-    // _msgSender() = 실제 사용자 (Meta-tx 지원)
-    IERC20(token).safeTransferFrom(_msgSender(), merchant, amount);
-
-    emit PaymentCompleted(
-        paymentId,
-        _msgSender(),
-        merchant,
-        token,
-        amount,
-        block.timestamp
+```typescript
+// Client-side: Convert order ID to bytes32
+function generatePaymentId(orderId: string, chainId: number): bytes32 {
+    return keccak256(
+        encodePacked(
+            chainId,
+            orderId,
+            block.timestamp  // Optional: for uniqueness
+        )
     );
+}
+
+// Simple version (recommended for MVP)
+function generatePaymentId(orderId: string): bytes32 {
+    return keccak256(toUtf8Bytes(orderId));
 }
 ```
 
 ---
 
-## 6. Meta Transaction (ERC-2771)
+## 2. Meta Transaction Implementation
 
-### 6.1 Flow
+### 2.1 ERC2771 Flow
 
 ```
-User (Signer)
-    │
-    │ 1. Sign EIP-712 ForwardRequest
-    ▼
-Payment Server
-    │
-    │ 2. Verify signature
-    │ 3. Submit to OZ Defender
-    ▼
-ERC2771Forwarder
-    │
-    │ 4. Forward call with original signer
-    ▼
-PaymentGateway
-    │
-    │ _msgSender() returns original signer
-    ▼
-Token Transfer
+┌────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   User     │────▶│ ERC2771Forwarder│────▶│ PaymentGateway  │
+│  (Signer)  │     │ (Trusted)       │     │ (ERC2771Context)│
+└────────────┘     └─────────────────┘     └─────────────────┘
+      │                    │                       │
+      │ 1. Sign EIP-712    │                       │
+      │    ForwardRequest  │                       │
+      │                    │                       │
+      │ 2. Submit to Relay │                       │
+      │───────────────────▶│                       │
+      │                    │                       │
+      │                    │ 3. Verify signature   │
+      │                    │    & execute call     │
+      │                    │──────────────────────▶│
+      │                    │                       │
+      │                    │                       │ 4. _msgSender()
+      │                    │                       │    returns original
+      │                    │                       │    signer
 ```
 
-### 6.2 EIP-712 Domain
+### 2.2 EIP-712 Domain Separator
 
 ```typescript
 const domain = {
-  name: "ERC2771Forwarder",
-  version: "1",
-  chainId: 80002,  // Polygon Amoy
-  verifyingContract: FORWARDER_ADDRESS
+    name: "ERC2771Forwarder",
+    version: "1",
+    chainId: 80002,  // Polygon Amoy
+    verifyingContract: FORWARDER_ADDRESS
 };
 ```
 
-### 6.3 ForwardRequest Types
+### 2.3 ForwardRequest Structure
 
 ```typescript
 const types = {
-  ForwardRequest: [
-    { name: "from", type: "address" },
-    { name: "to", type: "address" },
-    { name: "value", type: "uint256" },
-    { name: "gas", type: "uint256" },
-    { name: "nonce", type: "uint256" },
-    { name: "deadline", type: "uint48" },
-    { name: "data", type: "bytes" }
-  ]
+    ForwardRequest: [
+        { name: "from", type: "address" },      // Original signer
+        { name: "to", type: "address" },        // Target contract
+        { name: "value", type: "uint256" },     // ETH value (0 for ERC20)
+        { name: "gas", type: "uint256" },       // Gas limit
+        { name: "nonce", type: "uint256" },     // Replay protection
+        { name: "deadline", type: "uint48" },   // Expiration timestamp
+        { name: "data", type: "bytes" }         // Encoded function call
+    ]
 };
 ```
 
-### 6.4 OZ Defender Integration
+### 2.4 OpenZeppelin Defender Integration
 
 ```typescript
-import { Defender } from '@openzeppelin/defender-sdk';
+// Defender Relay Webhook URL
+const DEFENDER_RELAY_URL = "https://api.defender.openzeppelin.com/actions/xxx/webhook/yyy";
 
-const client = new Defender({
-  apiKey: process.env.OZ_DEFENDER_API_KEY,
-  apiSecret: process.env.OZ_DEFENDER_API_SECRET
-});
+// Submit meta-tx
+async function submitToDefender(signedRequest: SignedForwardRequest) {
+    const response = await fetch(DEFENDER_RELAY_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Api-Key': DEFENDER_API_KEY
+        },
+        body: JSON.stringify({
+            request: signedRequest.request,
+            signature: signedRequest.signature
+        })
+    });
 
-async function relayTransaction(
-  forwardRequest: ForwardRequest,
-  signature: string
-): Promise<string> {
-  const relayer = client.relaySigner.getRelayer(process.env.RELAYER_ID);
-
-  const tx = await relayer.sendTransaction({
-    to: FORWARDER_ADDRESS,
-    data: encodeForwarderExecute(forwardRequest, signature),
-    gasLimit: 500000
-  });
-
-  return tx.hash;
+    return response.json(); // { txHash: "0x..." }
 }
 ```
 
 ---
 
-## 7. SDK (`@globalmsq/msqpay`)
+## 3. SDK Architecture
 
-### 7.1 Configuration
+### 3.1 Class Diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      MSQPayClient                           │
+├─────────────────────────────────────────────────────────────┤
+│ - config: MSQPayConfig                                      │
+│ - provider: PublicClient                                    │
+│ - gatewayContract: Contract                                 │
+├─────────────────────────────────────────────────────────────┤
+│ + constructor(config: MSQPayConfig)                         │
+│ + getPaymentTxData(params: PaymentParams): TransactionReq   │
+│ + getMetaTxSignRequest(params, payer): EIP712SignRequest    │
+│ + submitMetaTx(signed: SignedRequest): Promise<string>      │
+│ + getPayment(id: string): Promise<Payment | null>           │
+│ + getPaymentsByMerchant(addr: string): Promise<Payment[]>   │
+│ + onPaymentComplete(cb: Callback): Unsubscribe              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 3.2 Configuration Interface
 
 ```typescript
-type Environment = 'development' | 'staging' | 'production' | 'custom';
-
 interface MSQPayConfig {
-  environment: Environment;
-  apiKey: string;
-  customApiUrl?: string;  // environment가 'custom'일 때만
+    // Required
+    chainId: number;
+    rpcUrl: string;
+    gatewayAddress: Address;
+    forwarderAddress: Address;
+
+    // Optional
+    defenderRelayUrl?: string;   // For meta-tx
+    subgraphUrl?: string;        // For queries
 }
 
-const API_URLS: Record<Exclude<Environment, 'custom'>, string> = {
-  development: 'http://localhost:3001',
-  staging: 'https://pay-api.staging.msq.com',
-  production: 'https://pay-api.msq.com'
+// Pre-configured for Polygon Amoy
+const POLYGON_AMOY_CONFIG: MSQPayConfig = {
+    chainId: 80002,
+    rpcUrl: "https://rpc-amoy.polygon.technology",
+    gatewayAddress: "0x...",  // TBD after deployment
+    forwarderAddress: "0x...", // TBD after deployment
+    subgraphUrl: "https://api.studio.thegraph.com/..."
 };
 ```
 
-### 7.2 Class Interface
+### 3.3 Payment Params
 
 ```typescript
-class MSQPayClient {
-  private apiUrl: string;
-  private apiKey: string;
-  private http: AxiosInstance;
-
-  constructor(config: MSQPayConfig);
-
-  // URL 관리 (custom용)
-  setApiUrl(url: string): void;
-  getApiUrl(): string;
-
-  // 결제 생성
-  createPayment(params: CreatePaymentParams): Promise<Payment>;
-
-  // 상태 조회
-  getPaymentStatus(paymentId: string): Promise<PaymentStatus>;
-
-  // Gasless
-  getGaslessData(paymentId: string, userAddress: string): Promise<GaslessData>;
-  submitGaslessSignature(
-    paymentId: string,
-    signature: string,
-    forwardRequest: ForwardRequest
-  ): Promise<RelayResult>;
-}
-```
-
-### 7.3 Type Definitions
-
-```typescript
-interface CreatePaymentParams {
-  orderId: string;
-  amount: string;           // wei 단위
-  token: `0x${string}`;     // 토큰 주소
-  merchant: `0x${string}`;  // 수취인 주소
+interface PaymentParams {
+    paymentId: string;    // Unique order/payment ID (will be hashed)
+    token: Address;       // ERC20 token address
+    amount: bigint;       // Amount in smallest unit (wei)
+    merchant: Address;    // Recipient address
 }
 
-interface Payment {
-  paymentId: `0x${string}`;
-  orderId: string;
-  amount: string;
-  token: `0x${string}`;
-  merchant: `0x${string}`;
-  status: 'pending' | 'completed';
-}
-
-interface PaymentStatus {
-  paymentId: `0x${string}`;
-  status: 'pending' | 'completed';
-}
-
-interface ForwardRequest {
-  from: `0x${string}`;
-  to: `0x${string}`;
-  value: string;
-  gas: string;
-  nonce: string;
-  deadline: string;
-  data: `0x${string}`;
-}
-
-interface GaslessData {
-  nonce: string;
-  forwardRequest: ForwardRequest;
-  typedData: TypedData;
-}
-
-interface RelayResult {
-  txHash: `0x${string}`;
-  status: 'submitted' | 'confirmed' | 'failed';
-}
-```
-
-### 7.4 Implementation
-
-```typescript
-import axios, { AxiosInstance } from 'axios';
-
-const API_URLS = {
-  development: 'http://localhost:3001',
-  staging: 'https://pay-api.staging.msq.com',
-  production: 'https://pay-api.msq.com'
+// Example usage
+const params: PaymentParams = {
+    paymentId: "ORDER_12345",
+    token: "0xE4C687167705Abf55d709395f92e254bdF5825a2",
+    amount: parseUnits("100", 18),  // 100 SUT
+    merchant: "0x..."
 };
+```
 
-export class MSQPayClient {
-  private apiUrl: string;
-  private apiKey: string;
-  private http: AxiosInstance;
+---
 
-  constructor(config: MSQPayConfig) {
-    this.apiKey = config.apiKey;
+## 4. Subgraph Schema
 
-    if (config.environment === 'custom') {
-      if (!config.customApiUrl) {
-        throw new Error('customApiUrl is required when environment is "custom"');
-      }
-      this.apiUrl = config.customApiUrl;
+### 4.1 Entity Definitions
+
+```graphql
+# Individual payment record
+type Payment @entity(immutable: true) {
+    id: ID!                      # paymentId (bytes32 as hex string)
+    payer: Bytes!                # User address
+    merchant: Bytes!             # Recipient address
+    token: Bytes!                # Token contract address
+    amount: BigInt!              # Amount in wei
+    timestamp: BigInt!           # Unix timestamp
+    transactionHash: Bytes!      # TX hash
+    blockNumber: BigInt!         # Block number
+    gasMode: GasMode!            # Direct or MetaTx
+}
+
+enum GasMode {
+    Direct
+    MetaTx
+}
+
+# Merchant statistics (aggregated)
+type MerchantStats @entity {
+    id: ID!                      # Merchant address (lowercase)
+    totalReceived: BigInt!       # Total amount received
+    paymentCount: Int!           # Number of payments
+    lastPaymentAt: BigInt        # Last payment timestamp
+}
+
+# Daily volume statistics
+type DailyVolume @entity {
+    id: ID!                      # Date string (YYYY-MM-DD)
+    date: BigInt!                # Unix timestamp (start of day)
+    volume: BigInt!              # Total volume
+    count: Int!                  # Number of transactions
+}
+
+# Token statistics
+type TokenStats @entity {
+    id: ID!                      # Token address
+    symbol: String               # Token symbol (nullable, cached from first tx)
+    totalVolume: BigInt!
+    transactionCount: Int!
+}
+
+# Global statistics
+type GlobalStats @entity {
+    id: ID!                      # Singleton: "global"
+    totalPayments: Int!          # Total number of payments
+    totalVolume: BigInt!         # Total volume (note: mixed decimals)
+    uniqueMerchants: Int!        # Number of unique merchants
+    uniquePayers: Int!           # Number of unique payers
+}
+```
+
+### 4.2 Event Handler
+
+```typescript
+// src/payment-gateway.ts
+import { PaymentCompleted } from "../generated/PaymentGateway/PaymentGateway";
+import { Payment, MerchantStats, DailyVolume } from "../generated/schema";
+import { BigInt, Bytes } from "@graphprotocol/graph-ts";
+
+const SECONDS_PER_DAY = 86400;
+
+export function handlePaymentCompleted(event: PaymentCompleted): void {
+    // Create Payment entity
+    let payment = new Payment(event.params.paymentId.toHexString());
+    payment.payer = event.params.payer;
+    payment.merchant = event.params.merchant;
+    payment.token = event.params.token;
+    payment.amount = event.params.amount;
+    payment.timestamp = event.params.timestamp;
+    payment.transactionHash = event.transaction.hash;
+    payment.blockNumber = event.block.number;
+
+    // Determine gas mode: Direct if tx.from == payer, MetaTx otherwise
+    // Note: AssemblyScript uses .equals() for address comparison
+    if (event.transaction.from.equals(event.params.payer)) {
+        payment.gasMode = "Direct";
     } else {
-      this.apiUrl = API_URLS[config.environment];
+        payment.gasMode = "MetaTx";
     }
+    payment.save();
 
-    this.http = axios.create({
-      baseURL: this.apiUrl,
-      headers: { 'x-api-key': this.apiKey }
-    });
-  }
+    // Update MerchantStats
+    let merchantId = event.params.merchant.toHexString();
+    let merchant = MerchantStats.load(merchantId);
+    if (merchant == null) {
+        merchant = new MerchantStats(merchantId);
+        merchant.totalReceived = BigInt.fromI32(0);
+        merchant.paymentCount = 0;
+    }
+    merchant.totalReceived = merchant.totalReceived.plus(event.params.amount);
+    merchant.paymentCount = merchant.paymentCount + 1;
+    merchant.lastPaymentAt = event.params.timestamp;
+    merchant.save();
 
-  setApiUrl(url: string): void {
-    this.apiUrl = url;
-    this.http.defaults.baseURL = url;
-  }
+    // Update DailyVolume
+    let dayId = getDayId(event.params.timestamp);
+    let daily = DailyVolume.load(dayId);
+    if (daily == null) {
+        daily = new DailyVolume(dayId);
+        daily.date = getDayStart(event.params.timestamp);
+        daily.volume = BigInt.fromI32(0);
+        daily.count = 0;
+    }
+    daily.volume = daily.volume.plus(event.params.amount);
+    daily.count = daily.count + 1;
+    daily.save();
+}
 
-  getApiUrl(): string {
-    return this.apiUrl;
-  }
+// Note: AssemblyScript doesn't support JavaScript Date API
+// Use BigInt arithmetic instead
+function getDayId(timestamp: BigInt): string {
+    let dayNumber = timestamp.div(BigInt.fromI32(SECONDS_PER_DAY));
+    return "day-" + dayNumber.toString();
+}
 
-  async createPayment(params: CreatePaymentParams): Promise<Payment> {
-    const { data } = await this.http.post('/payments/create', params);
-    return data;
-  }
-
-  async getPaymentStatus(paymentId: string): Promise<PaymentStatus> {
-    const { data } = await this.http.get(`/payments/${paymentId}/status`);
-    return data;
-  }
-
-  async getGaslessData(paymentId: string, userAddress: string): Promise<GaslessData> {
-    const { data } = await this.http.get(
-      `/payments/${paymentId}/gasless?userAddress=${userAddress}`
-    );
-    return data;
-  }
-
-  async submitGaslessSignature(
-    paymentId: string,
-    signature: string,
-    forwardRequest: ForwardRequest
-  ): Promise<RelayResult> {
-    const { data } = await this.http.post(`/payments/${paymentId}/relay`, {
-      signature,
-      forwardRequest
-    });
-    return data;
-  }
+function getDayStart(timestamp: BigInt): BigInt {
+    let seconds = timestamp.toI64();
+    let dayStart = seconds - (seconds % SECONDS_PER_DAY);
+    return BigInt.fromI64(dayStart);
 }
 ```
 
-### 7.5 Usage Example
+### 4.3 Example Queries
 
-```typescript
-import { MSQPayClient } from '@globalmsq/msqpay';
-
-// 초기화
-const client = new MSQPayClient({
-  environment: 'development',
-  apiKey: 'sk_test_abc123'
-});
-
-// Direct Payment Flow
-async function directPayment(orderId: string, amount: string) {
-  // 1. 결제 생성
-  const payment = await client.createPayment({
-    orderId,
-    amount,
-    token: '0xE4C687167705Abf55d709395f92e254bdF5825a2',
-    merchant: '0x...'
-  });
-
-  // 2. 프론트에 payment 정보 전달
-  // 3. 프론트에서 Metamask TX 실행
-  // 4. 상태 polling
-  let status = await client.getPaymentStatus(payment.paymentId);
-  while (status.status === 'pending') {
-    await sleep(2000);
-    status = await client.getPaymentStatus(payment.paymentId);
-  }
-
-  return status;
+```graphql
+# Get payment by ID
+query GetPayment($id: ID!) {
+    payment(id: $id) {
+        id
+        payer
+        merchant
+        amount
+        timestamp
+        transactionHash
+        gasMode
+    }
 }
 
-// Gasless Payment Flow
-async function gaslessPayment(orderId: string, amount: string, userAddress: string) {
-  // 1. 결제 생성
-  const payment = await client.createPayment({
-    orderId,
-    amount,
-    token: '0xE4C687167705Abf55d709395f92e254bdF5825a2',
-    merchant: '0x...'
-  });
+# Get merchant payments
+query GetMerchantPayments($merchant: Bytes!, $first: Int, $skip: Int) {
+    payments(
+        where: { merchant: $merchant }
+        orderBy: timestamp
+        orderDirection: desc
+        first: $first
+        skip: $skip
+    ) {
+        id
+        payer
+        amount
+        timestamp
+        gasMode
+    }
+}
 
-  // 2. Gasless 데이터 조회
-  const gaslessData = await client.getGaslessData(payment.paymentId, userAddress);
+# Get merchant stats
+query GetMerchantStats($id: ID!) {
+    merchantStats(id: $id) {
+        totalReceived
+        paymentCount
+        lastPaymentAt
+    }
+}
 
-  // 3. 프론트에 typedData 전달 → 서명 받기
-  // 4. 서명 제출
-  const result = await client.submitGaslessSignature(
-    payment.paymentId,
-    signature,  // 프론트에서 받은 서명
-    gaslessData.forwardRequest
-  );
-
-  // 5. 상태 확인
-  const status = await client.getPaymentStatus(payment.paymentId);
-  return status;
+# Get daily volumes
+query GetDailyVolumes($days: Int!) {
+    dailyVolumes(
+        orderBy: date
+        orderDirection: desc
+        first: $days
+    ) {
+        id
+        date
+        volume
+        count
+    }
 }
 ```
 
 ---
 
-## 8. 프론트엔드 샘플 코드
+## 5. Demo App Architecture
 
-### 8.1 Direct Payment
+### 5.1 Page Structure
 
-```typescript
-import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { parseUnits } from 'viem';
-
-function DirectPayment({ payment }) {
-  const { writeContract, data: hash } = useWriteContract();
-  const { isSuccess } = useWaitForTransactionReceipt({ hash });
-
-  const handlePay = async () => {
-    await writeContract({
-      address: GATEWAY_ADDRESS,
-      abi: PaymentGatewayABI,
-      functionName: 'pay',
-      args: [
-        payment.paymentId,
-        payment.token,
-        BigInt(payment.amount),
-        payment.merchant
-      ]
-    });
-  };
-
-  return (
-    <button onClick={handlePay}>
-      {isSuccess ? '결제 완료' : '결제하기'}
-    </button>
-  );
-}
+```
+apps/demo/src/app/
+├── layout.tsx              # Root layout with providers
+├── page.tsx                # Home - Product list
+├── checkout/
+│   └── [orderId]/
+│       └── page.tsx        # Checkout page
+├── history/
+│   └── page.tsx            # Payment history
+└── api/
+    └── relay/
+        └── route.ts        # Relay endpoint (optional)
 ```
 
-### 8.2 Gasless Payment
+### 5.2 Component Hierarchy
 
-```typescript
-import { useSignTypedData } from 'wagmi';
-
-function GaslessPayment({ typedData, onSign }) {
-  const { signTypedData } = useSignTypedData();
-
-  const handleSign = async () => {
-    const signature = await signTypedData({
-      domain: typedData.domain,
-      types: typedData.types,
-      primaryType: typedData.primaryType,
-      message: typedData.message
-    });
-
-    // 서명을 상점서버로 전송
-    onSign(signature);
-  };
-
-  return (
-    <button onClick={handleSign}>
-      서명하기 (가스비 무료)
-    </button>
-  );
-}
+```
+App
+├── Providers (wagmi, rainbow, tanstack-query)
+├── Header
+│   ├── Logo
+│   └── ConnectButton (RainbowKit)
+├── ProductList
+│   └── ProductCard (x N)
+│       ├── Image
+│       ├── Title
+│       ├── Price (SUT)
+│       └── BuyButton
+├── PaymentModal (Dialog)
+│   ├── OrderSummary
+│   ├── GasModeSelector
+│   │   ├── DirectOption
+│   │   └── GaslessOption
+│   ├── PaymentButton
+│   └── StatusIndicator
+└── PaymentHistory
+    └── PaymentRow (x N)
 ```
 
-### 8.3 Approve (토큰당 1회)
+### 5.3 State Management
 
 ```typescript
-import { useWriteContract, useReadContract } from 'wagmi';
-import { maxUint256 } from 'viem';
+// Payment flow state machine
+type PaymentState =
+    | { status: 'idle' }
+    | { status: 'selecting-gas-mode' }
+    | { status: 'approving-token'; txHash?: string }
+    | { status: 'signing' }
+    | { status: 'submitting'; txHash?: string }
+    | { status: 'confirming'; txHash: string }
+    | { status: 'completed'; payment: Payment }
+    | { status: 'failed'; error: Error };
 
-function TokenApprove({ token, gateway }) {
-  const { data: allowance } = useReadContract({
-    address: token,
-    abi: erc20Abi,
-    functionName: 'allowance',
-    args: [userAddress, gateway]
-  });
+// Hook: usePayment
+function usePayment() {
+    const [state, setState] = useState<PaymentState>({ status: 'idle' });
 
-  const { writeContract } = useWriteContract();
+    const startPayment = async (params: PaymentParams, gasMode: GasMode) => {
+        // 1. Check token approval
+        // 2. Approve if needed
+        // 3. Direct: send tx / Meta: sign & submit
+        // 4. Wait for confirmation
+        // 5. Update state
+    };
 
-  const needsApprove = !allowance || allowance === 0n;
-
-  const handleApprove = async () => {
-    await writeContract({
-      address: token,
-      abi: erc20Abi,
-      functionName: 'approve',
-      args: [gateway, maxUint256]
-    });
-  };
-
-  if (!needsApprove) return null;
-
-  return (
-    <button onClick={handleApprove}>
-      토큰 승인 (1회만)
-    </button>
-  );
+    return { state, startPayment, reset };
 }
 ```
 
 ---
 
-## 9. Network Configuration
+## 6. Security Considerations
 
-### 9.1 Polygon Amoy Testnet
+### 6.1 Contract Security
+
+| Risk | Mitigation |
+|------|------------|
+| Reentrancy | `ReentrancyGuard` modifier on all external functions |
+| Replay Attack | `processedPayments` mapping prevents duplicate payment IDs |
+| Unauthorized Upgrade | `onlyOwner` modifier on `_authorizeUpgrade` |
+| Meta-tx Replay | Forwarder nonce + deadline prevents replay |
+
+### 6.2 SDK Security
+
+| Risk | Mitigation |
+|------|------------|
+| Invalid Payment ID | Hash order ID to ensure uniqueness |
+| Signature Reuse | Include nonce and deadline in EIP-712 data |
+| Man-in-the-middle | HTTPS only for relay communication |
+
+### 6.3 Recommended Audit Checklist
+
+- [ ] Reentrancy vulnerabilities
+- [ ] Integer overflow/underflow (Solidity 0.8+ has built-in checks)
+- [ ] Access control
+- [ ] Front-running risks
+- [ ] ERC20 token compatibility (non-standard tokens)
+- [ ] Upgrade safety (storage layout)
+
+---
+
+## 7. Network Configuration
+
+### 7.1 Polygon Amoy Testnet
 
 ```typescript
 export const POLYGON_AMOY = {
-  chainId: 80002,
-  name: "Polygon Amoy Testnet",
-  network: "polygon-amoy",
-  nativeCurrency: {
-    name: "MATIC",
-    symbol: "MATIC",
-    decimals: 18
-  },
-  rpcUrls: {
-    default: {
-      http: ["https://rpc-amoy.polygon.technology"],
-      webSocket: ["wss://rpc-amoy.polygon.technology"]
-    }
-  },
-  blockExplorers: {
-    default: {
-      name: "PolygonScan",
-      url: "https://amoy.polygonscan.com"
-    }
-  },
-  testnet: true
+    chainId: 80002,
+    name: "Polygon Amoy Testnet",
+    network: "polygon-amoy",
+    nativeCurrency: {
+        name: "MATIC",
+        symbol: "MATIC",
+        decimals: 18
+    },
+    rpcUrls: {
+        default: {
+            http: ["https://rpc-amoy.polygon.technology"],
+            webSocket: ["wss://rpc-amoy.polygon.technology"]
+        },
+        public: {
+            http: ["https://rpc-amoy.polygon.technology"]
+        }
+    },
+    blockExplorers: {
+        default: {
+            name: "PolygonScan",
+            url: "https://amoy.polygonscan.com"
+        }
+    },
+    testnet: true
 };
 ```
 
-### 9.2 Contract Addresses
+### 7.2 Deployed Addresses (TBD)
 
 ```typescript
 export const CONTRACTS = {
-  POLYGON_AMOY: {
-    forwarder: "0x...",      // ERC2771Forwarder
-    gateway: "0x...",        // PaymentGateway Proxy
-  }
+    // Will be filled after deployment
+    POLYGON_AMOY: {
+        forwarder: "0x...",      // ERC2771Forwarder
+        gateway: "0x...",        // PaymentGateway Proxy
+        gatewayImpl: "0x..."     // PaymentGateway Implementation
+    }
 };
 
 export const TOKENS = {
-  POLYGON_AMOY: {
-    SUT: "0xE4C687167705Abf55d709395f92e254bdF5825a2"
-  }
+    POLYGON_AMOY: {
+        SUT: "0xE4C687167705Abf55d709395f92e254bdF5825a2"
+    }
+};
+
+export const SUBGRAPH = {
+    POLYGON_AMOY: "https://api.studio.thegraph.com/query/..."
 };
 ```
 
 ---
 
-## 10. Gas Estimates
+## 8. Testing Strategy
+
+### 8.1 Contract Tests
+
+```typescript
+describe("PaymentGateway", () => {
+    describe("Direct Payment", () => {
+        it("should process payment successfully");
+        it("should emit PaymentCompleted event");
+        it("should reject duplicate payment ID");
+        it("should reject zero amount");
+        it("should reject zero merchant address");
+    });
+
+    describe("Meta Transaction", () => {
+        it("should process meta-tx payment");
+        it("should use _msgSender() for payer");
+        it("should reject invalid signature");
+        it("should reject expired request");
+    });
+
+    describe("Admin Functions", () => {
+        it("should allow owner to set supported tokens");
+        it("should allow owner to upgrade contract");
+        it("should reject non-owner upgrade");
+    });
+});
+```
+
+### 8.2 SDK Tests
+
+```typescript
+describe("MSQPayClient", () => {
+    describe("getPaymentTxData", () => {
+        it("should return valid transaction data");
+        it("should encode function call correctly");
+    });
+
+    describe("getMetaTxSignRequest", () => {
+        it("should return valid EIP-712 request");
+        it("should calculate correct nonce");
+    });
+
+    describe("submitMetaTx", () => {
+        it("should submit to Defender relay");
+        it("should return transaction hash");
+    });
+});
+```
+
+### 8.3 E2E Tests
+
+```typescript
+describe("E2E Payment Flow", () => {
+    it("Direct: User can complete payment");
+    it("Meta-tx: User can complete gasless payment");
+    it("Subgraph indexes payment within 30 seconds");
+    it("Payment history shows completed payments");
+});
+```
+
+---
+
+## 9. Deployment Checklist
+
+### 9.1 Pre-deployment
+
+- [ ] All tests passing
+- [ ] Contract verified on testnet
+- [ ] Environment variables configured
+- [ ] OZ Defender relay set up
+- [ ] Subgraph deployed
+
+### 9.2 Deployment Steps
+
+1. Deploy ERC2771Forwarder (or use existing)
+2. Deploy PaymentGatewayV1 implementation
+3. Deploy ERC1967Proxy pointing to implementation
+4. Initialize proxy with forwarder and owner
+5. Verify all contracts on Polygonscan
+6. Update SDK constants
+7. Deploy subgraph
+8. Deploy demo app
+
+### 9.3 Post-deployment
+
+- [ ] Verify direct payment works
+- [ ] Verify meta-tx payment works
+- [ ] Verify subgraph indexing
+- [ ] Verify demo app functionality
+- [ ] Document deployed addresses
+
+---
+
+## 10. Appendix
+
+### 10.1 Gas Estimates
 
 | Operation | Estimated Gas |
 |-----------|---------------|
 | Direct Payment | ~65,000 |
 | Meta-tx Payment (via Forwarder) | ~85,000 |
-| Token Approval (1회) | ~46,000 |
+| Token Approval | ~46,000 |
 
----
+### 10.2 External Dependencies
 
-## 11. Error Handling
-
-### 11.1 Error Codes
-
-| Code | Description |
-|------|-------------|
-| `UNAUTHORIZED` | API Key 인증 실패 |
-| `INVALID_PAYMENT_ID` | 유효하지 않은 paymentId 형식 |
-| `INVALID_SIGNATURE` | EIP-712 서명 검증 실패 |
-| `RELAY_FAILED` | OZ Defender Relay 실패 |
-| `CONTRACT_ERROR` | Contract 호출 실패 |
-
-### 11.2 Error Response Format
-
-```typescript
-{
-  error: {
-    code: string;
-    message: string;
-    details?: any;
-  }
-}
-```
-
----
-
-## 12. Security Considerations
-
-### 12.1 API Security
-
-| 위협 | 대응 |
-|------|------|
-| API Key 노출 | HTTPS only, 서버사이드에서만 사용 |
-| 프론트 직접 호출 | API Key 검증으로 차단 |
-| 요청 위조 | API Key + storeId 매핑 검증 |
-
-### 12.2 Contract Security
-
-| 위협 | 대응 |
-|------|------|
-| Reentrancy | ReentrancyGuard 적용 |
-| Replay Attack | processedPayments mapping |
-| Meta-tx Replay | Forwarder nonce + deadline |
-| 무단 업그레이드 | onlyOwner modifier |
-
-### 12.3 Approve Security
-
-| 위협 | 대응 |
-|------|------|
-| 토큰 탈취 | `_msgSender()` 사용으로 본인만 전송 가능 |
-| 컨트랙트 취약점 | 감사(Audit) 권장 |
-
----
-
-## 13. Environment Variables
-
-### 13.1 결제서버
-
-```bash
-# API Key (MVP)
-STORE_API_KEYS='{"sk_test_xxx": {"storeId": "store_001", "name": "Demo"}}'
-
-# Blockchain
-POLYGON_AMOY_RPC=https://rpc-amoy.polygon.technology
-GATEWAY_ADDRESS=0x...
-FORWARDER_ADDRESS=0x...
-
-# OZ Defender (Gasless)
-OZ_DEFENDER_API_KEY=xxx
-OZ_DEFENDER_API_SECRET=xxx
-OZ_DEFENDER_RELAYER_ID=xxx
-```
-
-### 13.2 Demo App
-
-```bash
-NEXT_PUBLIC_GATEWAY_ADDRESS=0x...
-NEXT_PUBLIC_FORWARDER_ADDRESS=0x...
-NEXT_PUBLIC_TOKEN_ADDRESS=0xE4C687167705Abf55d709395f92e254bdF5825a2
-```
-
----
-
-## 14. Production 확장 사항
-
-MVP에서 Production으로 전환 시 추가되는 항목:
-
-### 14.1 데이터베이스
-
-```sql
-CREATE TABLE payments (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  payment_id VARCHAR(66) UNIQUE NOT NULL,
-  store_id VARCHAR(100) NOT NULL,
-  order_id VARCHAR(100) NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'pending',
-  amount VARCHAR(78) NOT NULL,
-  token VARCHAR(42) NOT NULL,
-  merchant VARCHAR(42) NOT NULL,
-  payer VARCHAR(42),
-  tx_hash VARCHAR(66),
-  expires_at TIMESTAMP NOT NULL,
-  completed_at TIMESTAMP,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE TABLE stores (
-  id VARCHAR(36) PRIMARY KEY,
-  api_key VARCHAR(64) UNIQUE NOT NULL,
-  name VARCHAR(255) NOT NULL,
-  webhook_url VARCHAR(512),
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-```
-
-### 14.2 추가 상태
-
-| 상태 | 설명 |
-|------|------|
-| `expired` | 30분 내 결제 없음 (cron job) |
-| `failed` | 금액 불일치 등 검증 실패 |
-
-### 14.3 금액 검증
-
-```typescript
-// Production에서 추가되는 검증
-async function verifyPayment(paymentId: string): Promise<PaymentStatus> {
-  const dbPayment = await db.payments.findByPaymentId(paymentId);
-  const isProcessed = await contract.read.processedPayments([paymentId]);
-
-  if (isProcessed) {
-    // 이벤트에서 실제 금액 확인
-    const event = await getPaymentEvent(paymentId);
-    if (event.amount !== dbPayment.amount) {
-      return { status: 'failed', reason: 'amount_mismatch' };
-    }
-    return { status: 'completed' };
-  }
-
-  // 만료 체크
-  if (new Date() > dbPayment.expires_at) {
-    return { status: 'expired' };
-  }
-
-  return { status: 'pending' };
-}
-```
+| Package | Version | Purpose |
+|---------|---------|---------|
+| @openzeppelin/contracts | 5.0.0 | Base contracts |
+| @openzeppelin/contracts-upgradeable | 5.0.0 | Upgradeable contracts |
+| viem | 2.0.0+ | Ethereum interaction |
+| wagmi | 2.5.0+ | React Web3 hooks |
+| @rainbow-me/rainbowkit | 2.0.0+ | Wallet connection |
+| @graphprotocol/graph-ts | 0.32.0+ | Subgraph mapping |
