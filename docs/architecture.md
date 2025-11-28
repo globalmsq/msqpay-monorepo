@@ -471,9 +471,10 @@ await fetch('/api/payments/relay', {
 
 | 항목 | MVP | Production |
 |------|-----|------------|
+| 서버 구조 | 단일 결제서버 | API 서버 + Status Worker 분리 |
 | DB | 없음 | PostgreSQL |
-| Redis | 없음 | 캐시 (선택) |
-| 이벤트 모니터링 | 없음 | WebSocket (선택) |
+| Redis | 없음 | 상태 캐시 |
+| 이벤트 모니터링 | 없음 | 블록체인 이벤트 구독 |
 | 결제 검증 | Contract만 조회 | Contract + DB 비교 |
 | API Key | 환경변수 | DB |
 | 금액 검증 | 없음 | DB 저장값과 비교 |
@@ -482,7 +483,257 @@ await fetch('/api/payments/relay', {
 
 ---
 
-## 10. 제공물 정리
+## 10. Production 아키텍처 (향후)
+
+> ⚠️ **Note**: 이 섹션은 MVP 완료 후 구현 예정입니다.
+
+### 10.1 서버 분리 구조
+
+```mermaid
+flowchart TB
+    subgraph Client["클라이언트"]
+        Frontend[프론트엔드]
+        Wallet[Wallet<br/>Metamask]
+    end
+
+    subgraph Store["상점"]
+        StoreServer[상점서버<br/>SDK]
+    end
+
+    subgraph Payment["결제 시스템"]
+        subgraph APILayer["API 서버"]
+            APIServer[Payment API<br/>- 결제 생성<br/>- Gasless 데이터<br/>- 서명 Relay]
+        end
+
+        subgraph WorkerLayer["Status Worker"]
+            StatusWorker[Status Worker<br/>- 이벤트 모니터링<br/>- 상태 업데이트<br/>- 만료 처리]
+        end
+
+        subgraph DataLayer["데이터 계층"]
+            DB[(PostgreSQL)]
+            Redis[(Redis Cache)]
+        end
+
+        OZRelay[OZ Defender Relay]
+    end
+
+    subgraph Blockchain["블록체인"]
+        Contract[PaymentGateway<br/>Source of Truth]
+    end
+
+    Frontend --> StoreServer
+    Frontend --> Wallet
+    Wallet -->|Direct TX| Contract
+    StoreServer -->|API Key 인증| APIServer
+    APIServer --> DB
+    APIServer -->|캐시 조회| Redis
+    APIServer --> OZRelay
+    OZRelay -->|Gasless TX| Contract
+    StatusWorker -->|이벤트 구독| Contract
+    StatusWorker --> DB
+    StatusWorker -->|캐시 갱신| Redis
+```
+
+### 10.2 서버 역할 분리
+
+| 서버 | 역할 | Stateless |
+|------|------|-----------|
+| **API Server** | 외부 요청 처리, 결제 생성, Relay | O |
+| **Status Worker** | 블록체인 이벤트 모니터링, 상태 동기화 | X |
+
+### 10.3 API Server
+
+**책임**:
+- 결제 생성 (`POST /payments/create`) → DB 저장
+- 상태 조회 (`GET /payments/:id/status`) → Redis 캐시 우선
+- Gasless 데이터 생성 (`GET /payments/:id/gasless`)
+- 서명 Relay (`POST /payments/:id/relay`)
+
+**특징**:
+- Stateless 설계로 수평 확장 가능
+- Redis 캐시로 빠른 상태 응답
+- DB에 결제 정보 영구 저장
+
+### 10.4 Status Worker
+
+**책임**:
+- 블록체인 `PaymentProcessed` 이벤트 구독
+- DB 결제 상태 업데이트 (`pending` → `completed`)
+- Redis 캐시 갱신
+- 만료 결제 처리 (`pending` → `expired`)
+
+**구현 방식**:
+```typescript
+// 이벤트 구독 (viem watchContractEvent)
+publicClient.watchContractEvent({
+  address: GATEWAY_ADDRESS,
+  abi: PaymentGatewayABI,
+  eventName: 'PaymentProcessed',
+  onLogs: async (logs) => {
+    for (const log of logs) {
+      const { paymentId, payer, token, amount, merchant } = log.args;
+
+      // DB 업데이트
+      await db.payment.update({
+        where: { paymentId },
+        data: {
+          status: 'completed',
+          txHash: log.transactionHash,
+          completedAt: new Date()
+        }
+      });
+
+      // Redis 캐시 갱신
+      await redis.set(`payment:${paymentId}`, 'completed', 'EX', 3600);
+    }
+  }
+});
+```
+
+**만료 처리**:
+```typescript
+// 크론잡 (1분 간격)
+async function processExpiredPayments() {
+  const expiredPayments = await db.payment.findMany({
+    where: {
+      status: 'pending',
+      createdAt: { lt: subMinutes(new Date(), 30) }  // 30분 초과
+    }
+  });
+
+  for (const payment of expiredPayments) {
+    await db.payment.update({
+      where: { id: payment.id },
+      data: { status: 'expired' }
+    });
+    await redis.set(`payment:${payment.paymentId}`, 'expired', 'EX', 3600);
+  }
+}
+```
+
+### 10.5 결제 플로우 (Production)
+
+#### Direct Payment 시퀀스
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 사용자
+    participant F as 프론트엔드
+    participant S as 상점서버
+    participant A as API Server
+    participant D as DB/Redis
+    participant W as Wallet
+    participant C as Contract
+    participant SW as Status Worker
+
+    U->>F: 상품 결제 요청
+    F->>S: 결제 준비 요청
+    S->>A: createPayment()
+    A->>D: 결제 정보 저장 (pending)
+    A-->>S: paymentId 응답
+    S-->>F: paymentId + 결제 정보
+
+    F->>W: Token Approve 요청 (필요시)
+    W-->>F: Approve 완료
+
+    F->>W: pay() TX 요청
+    W->>C: pay(paymentId, token, amount, merchant)
+    C-->>W: TX 완료
+    C->>SW: PaymentProcessed 이벤트
+
+    SW->>D: 상태 업데이트 (completed)
+
+    loop Polling (2초 간격)
+        S->>A: getPaymentStatus()
+        A->>D: 캐시/DB 조회
+        A-->>S: status 응답
+    end
+
+    S-->>F: 결제 완료
+    F-->>U: 상품 지급
+```
+
+#### Gasless Payment 시퀀스
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 사용자
+    participant F as 프론트엔드
+    participant S as 상점서버
+    participant A as API Server
+    participant D as DB/Redis
+    participant W as Wallet
+    participant R as OZ Relay
+    participant C as Contract
+    participant SW as Status Worker
+
+    U->>F: 상품 결제 요청
+    F->>S: 결제 준비 요청
+    S->>A: createPayment()
+    A->>D: 결제 정보 저장 (pending)
+    A-->>S: paymentId 응답
+
+    S->>A: getGaslessData(paymentId, userAddress)
+    A-->>S: typedData + forwardRequest
+    S-->>F: 서명 요청 데이터
+
+    F->>W: EIP-712 서명 요청 (가스비 없음)
+    W-->>F: signature
+
+    F->>S: signature 전송
+    S->>A: submitGaslessSignature()
+    A->>R: Relay 요청
+    R->>C: execute(forwardRequest, signature)
+    C-->>R: TX 완료
+    C->>SW: PaymentProcessed 이벤트
+
+    SW->>D: 상태 업데이트 (completed)
+
+    loop Polling (2초 간격)
+        S->>A: getPaymentStatus()
+        A->>D: 캐시/DB 조회
+        A-->>S: status 응답
+    end
+
+    S-->>F: 결제 완료
+    F-->>U: 상품 지급
+```
+
+### 10.6 데이터 흐름 요약
+
+| 단계 | Direct Payment | Gasless Payment |
+|------|---------------|-----------------|
+| 1. 결제 생성 | API Server → DB 저장 | 동일 |
+| 2. TX 실행 | 사용자 Wallet → Contract | OZ Relay → Contract |
+| 3. 이벤트 감지 | Status Worker 구독 | 동일 |
+| 4. 상태 갱신 | DB + Redis 업데이트 | 동일 |
+| 5. 완료 확인 | 상점서버 Polling | 동일 |
+
+### 10.7 확장성
+
+| 구성요소 | 확장 방식 |
+|----------|----------|
+| API Server | 수평 확장 (로드밸런서) |
+| Status Worker | 단일 인스턴스 (이벤트 중복 방지) |
+| PostgreSQL | Read Replica |
+| Redis | Cluster 모드 |
+
+### 10.8 MVP → Production 마이그레이션
+
+| 단계 | 작업 |
+|------|------|
+| 1 | PostgreSQL 스키마 생성 |
+| 2 | Redis 캐시 계층 추가 |
+| 3 | API Server에 DB/Redis 연동 |
+| 4 | Status Worker 개발 및 배포 |
+| 5 | 이벤트 구독 테스트 |
+| 6 | 기존 Contract 상태 동기화 |
+
+---
+
+## 11. 제공물 정리
 
 | 대상 | 제공물 | 설명 |
 |------|--------|------|
@@ -492,7 +743,7 @@ await fetch('/api/payments/relay', {
 
 ---
 
-## 11. 기술 스택
+## 12. 기술 스택
 
 | 구성요소 | 기술 |
 |----------|------|
@@ -505,9 +756,9 @@ await fetch('/api/payments/relay', {
 
 ---
 
-## 12. 보안 설계
+## 13. 보안 설계
 
-### 12.1 클라이언트 조작 방지
+### 13.1 클라이언트 조작 방지
 
 | 위협 | 대응 |
 |------|------|
@@ -516,7 +767,7 @@ await fetch('/api/payments/relay', {
 | 금액 조작 (Gasless) | 서명 데이터에서 amount 확인 |
 | 상점 위장 | API Key 인증 |
 
-### 12.2 컨트랙트 보안
+### 13.2 컨트랙트 보안
 
 | 위험 | 대응 |
 |------|------|
@@ -526,7 +777,7 @@ await fetch('/api/payments/relay', {
 
 ---
 
-## 13. 용어 정의
+## 14. 용어 정의
 
 | 용어 | 설명 |
 |------|------|
