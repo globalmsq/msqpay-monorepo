@@ -50,6 +50,7 @@ msqpay-monorepo/
 
 - Node.js >= 18
 - pnpm >= 8
+- Docker & Docker Compose (권장)
 
 ### Installation
 
@@ -61,7 +62,54 @@ pnpm install
 pnpm build
 ```
 
-### Development
+## Docker Development (Recommended)
+
+Docker Compose를 사용한 원클릭 개발 환경:
+
+### Quick Start
+
+```bash
+# 전체 스택 시작
+cd docker && docker-compose up -d
+
+# 로그 확인
+docker-compose logs -f server
+
+# 접속
+# Demo: http://localhost:3000
+# API:  http://localhost:3001/health
+# Hardhat: http://localhost:8545
+```
+
+### Services
+
+| 서비스 | 포트 | 설명 |
+|--------|------|------|
+| mysql | 3306 | 결제 데이터 (root/pass) |
+| redis | 6379 | 캐싱 |
+| hardhat | 8545 | 로컬 블록체인 |
+| server | 3001 | Payment API |
+| demo | 3000 | 프론트엔드 |
+
+### Commands
+
+```bash
+# 서비스 재시작
+docker-compose restart server
+
+# 리빌드
+docker-compose up -d --build server
+
+# MySQL 접속
+docker-compose exec mysql mysql -u root -ppass msqpay
+
+# 전체 초기화
+docker-compose down -v
+```
+
+## Manual Development
+
+Docker 없이 수동으로 개발하는 경우:
 
 ```bash
 # Terminal 1: Start Hardhat node

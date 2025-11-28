@@ -18,6 +18,7 @@ Status: Architecture Finalized
 - [x] PRD 문서 업데이트
 - [x] Technical Spec 문서 업데이트
 - [x] Architecture 문서 작성
+- [x] **Docker Compose 로컬 개발 환경**
 
 ### Architecture Summary
 
@@ -190,19 +191,23 @@ OZ_DEFENDER_RELAYER_ID=xxx
 
 ## Quick Start Commands
 
-### Resume Local Development
+### Docker (Recommended)
 ```bash
-# Terminal 1: Start Hardhat node
-cd contracts
-npx hardhat node
+cd docker && docker-compose up -d
+# Demo: http://localhost:3000
+# API: http://localhost:3001/health
+```
 
-# Terminal 2: Deploy contracts
-cd contracts
-pnpm deploy:local
+### Manual Development
+```bash
+# Terminal 1: Hardhat node
+cd contracts && npx hardhat node
 
-# Terminal 3: Start Demo App
-cd apps/demo
-pnpm dev
+# Terminal 2: Deploy
+cd contracts && pnpm deploy:local
+
+# Terminal 3: Demo App
+cd apps/demo && pnpm dev
 ```
 
 ### Run Tests

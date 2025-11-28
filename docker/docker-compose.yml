@@ -1,0 +1,138 @@
+version: '3.8'
+
+services:
+  # MySQL 8.0 - Payment Data
+  mysql:
+    image: mysql:8.0
+    container_name: msqpay-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: pass
+      MYSQL_DATABASE: msqpay
+      MYSQL_USER: msqpay
+      MYSQL_PASSWORD: pass
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+    networks:
+      - msqpay-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppass"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Redis 7 Alpine - Caching
+  redis:
+    image: redis:7-alpine
+    container_name: msqpay-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    networks:
+      - msqpay-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Hardhat Local Blockchain
+  hardhat:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.packages
+      target: hardhat
+    container_name: msqpay-hardhat
+    ports:
+      - "8545:8545"
+    networks:
+      - msqpay-network
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -q --spider http://localhost:8545 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # Payment Server (Fastify)
+  server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.packages
+      target: server
+    container_name: msqpay-server
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: msqpay
+      MYSQL_PASSWORD: pass
+      MYSQL_DATABASE: msqpay
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      BLOCKCHAIN_RPC_URL: http://hardhat:8545
+      GATEWAY_ADDRESS: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+      FORWARDER_ADDRESS: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      hardhat:
+        condition: service_healthy
+    networks:
+      - msqpay-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); })"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+  # Demo App (Next.js)
+  demo:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.packages
+      target: demo
+    container_name: msqpay-demo
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_GATEWAY_ADDRESS: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+      NEXT_PUBLIC_FORWARDER_ADDRESS: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
+      NEXT_PUBLIC_TOKEN_ADDRESS: "0xE4C687167705Abf55d709395f92e254bdF5825a2"
+      NEXT_PUBLIC_CHAIN_ID: 31337
+      NEXT_PUBLIC_RPC_URL: http://localhost:8545
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+    depends_on:
+      server:
+        condition: service_healthy
+    networks:
+      - msqpay-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); })"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+networks:
+  msqpay-network:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  redis-data:

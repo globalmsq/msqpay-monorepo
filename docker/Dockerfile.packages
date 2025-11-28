@@ -1,0 +1,123 @@
+# MSQPay Monorepo - Multi-stage Dockerfile
+# Targets: hardhat, server, demo
+
+# ============================================
+# Base Stage: Common dependencies
+# ============================================
+FROM node:20-alpine AS base
+
+# Install pnpm 10.23.0
+RUN npm install -g pnpm@10.23.0
+
+WORKDIR /app
+
+# Copy workspace configuration
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+
+# ============================================
+# Dependencies Stage
+# ============================================
+FROM base AS deps
+
+# Copy all package.json files
+COPY contracts/package.json ./contracts/
+COPY packages/sdk/package.json ./packages/sdk/
+COPY packages/server/package.json ./packages/server/
+COPY apps/demo/package.json ./apps/demo/
+
+# Install all dependencies
+RUN pnpm install --frozen-lockfile
+
+# ============================================
+# Hardhat Node Stage
+# ============================================
+FROM deps AS hardhat
+
+# Copy contracts source
+COPY contracts ./contracts
+
+WORKDIR /app/contracts
+
+# Expose Hardhat node port
+EXPOSE 8545
+
+# Run Hardhat node with network exposed
+CMD ["npx", "hardhat", "node", "--hostname", "0.0.0.0"]
+
+# ============================================
+# Server Builder Stage
+# ============================================
+FROM deps AS server-builder
+
+# Copy server source
+COPY packages/server ./packages/server
+
+WORKDIR /app/packages/server
+
+# Build server
+RUN pnpm build
+
+# ============================================
+# Server Runtime Stage
+# ============================================
+FROM base AS server
+
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/server/node_modules ./packages/server/node_modules
+
+# Copy built server
+COPY --from=server-builder /app/packages/server/dist ./packages/server/dist
+COPY --from=server-builder /app/packages/server/package.json ./packages/server/
+
+WORKDIR /app/packages/server
+
+# Expose server port
+EXPOSE 3001
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); })"
+
+# Run server
+CMD ["node", "dist/index.js"]
+
+# ============================================
+# Demo Builder Stage
+# ============================================
+FROM deps AS demo-builder
+
+# Copy demo source
+COPY apps/demo ./apps/demo
+
+WORKDIR /app/apps/demo
+
+# Build demo app
+RUN pnpm build
+
+# ============================================
+# Demo Runtime Stage
+# ============================================
+FROM base AS demo
+
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/demo/node_modules ./apps/demo/node_modules
+
+# Copy built demo
+COPY --from=demo-builder /app/apps/demo/.next ./apps/demo/.next
+COPY --from=demo-builder /app/apps/demo/public ./apps/demo/public
+COPY --from=demo-builder /app/apps/demo/package.json ./apps/demo/
+COPY --from=demo-builder /app/apps/demo/next.config.js ./apps/demo/
+
+WORKDIR /app/apps/demo
+
+# Expose demo port
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); })"
+
+# Run demo app
+CMD ["pnpm", "start"]

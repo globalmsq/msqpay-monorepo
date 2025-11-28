@@ -45,30 +45,46 @@
 ### 2.2 디렉토리 구조
 
 ```
-packages/server/
-├── src/
-│   ├── app.ts                    # Fastify 앱 초기화
-│   ├── server.ts                 # HTTP 서버 시작
-│   ├── config/
-│   │   ├── env.ts                # 환경변수 검증 (Zod)
-│   │   └── contracts.ts          # Contract ABI 및 주소
-│   ├── routes/
-│   │   ├── health.ts             # GET /health
-│   │   └── payments.ts           # 4개 결제 API
-│   ├── services/
-│   │   ├── payment.service.ts    # paymentId 생성, 상태 조회
-│   │   ├── gasless.service.ts    # Gasless typedData 생성
-│   │   ├── relay.service.ts      # OZ Defender Relay
-│   │   └── contract.service.ts   # viem Contract 조회
-│   ├── middleware/
-│   │   ├── apiKey.ts             # API Key 인증
-│   │   └── errorHandler.ts       # 에러 핸들링
-│   └── types/
-│       ├── api.ts                # API 요청/응답 타입
-│       └── errors.ts             # 커스텀 에러 타입
-├── package.json
-├── tsconfig.json
-└── vitest.config.ts
+msqpay-monorepo/
+├── docker/                        # Docker 개발 환경
+│   ├── Dockerfile.packages        # 통합 Dockerfile (모든 타겟 정의)
+│   ├── docker-compose.yml         # 개발 환경 (환경변수 하드코딩)
+│   ├── mysql/
+│   │   ├── init.sql               # DB 스키마 초기화
+│   │   └── my.cnf                 # MySQL 설정
+│   ├── redis/
+│   │   └── redis.conf             # Redis 설정
+│   └── .dockerignore              # 빌드 제외 파일
+├── contracts/                     # Smart contracts
+├── packages/
+│   ├── sdk/                       # @globalmsq/msqpay
+│   └── server/                    # 결제서버
+│       ├── src/
+│       │   ├── app.ts             # Fastify 앱 초기화
+│       │   ├── server.ts          # HTTP 서버 시작
+│       │   ├── config/
+│       │   │   ├── env.ts         # 환경변수 검증 (Zod)
+│       │   │   └── contracts.ts   # Contract ABI 및 주소
+│       │   ├── routes/
+│       │   │   ├── health.ts      # GET /health
+│       │   │   └── payments.ts    # 4개 결제 API
+│       │   ├── services/
+│       │   │   ├── payment.service.ts    # paymentId 생성, 상태 조회
+│       │   │   ├── gasless.service.ts    # Gasless typedData 생성
+│       │   │   ├── relay.service.ts      # OZ Defender Relay
+│       │   │   └── contract.service.ts   # viem Contract 조회
+│       │   ├── middleware/
+│       │   │   ├── apiKey.ts      # API Key 인증
+│       │   │   └── errorHandler.ts # 에러 핸들링
+│       │   └── types/
+│       │       ├── api.ts         # API 요청/응답 타입
+│       │       └── errors.ts      # 커스텀 에러 타입
+│       ├── package.json
+│       ├── tsconfig.json
+│       └── vitest.config.ts
+├── apps/
+│   └── demo/                      # Demo Web App
+└── docs/
 ```
 
 ### 2.3 API 엔드포인트

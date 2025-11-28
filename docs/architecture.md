@@ -63,6 +63,64 @@ flowchart TB
 
 ---
 
+## 2.5 로컬 개발 환경
+
+### Docker Compose 아키텍처
+
+```mermaid
+flowchart TB
+    subgraph Docker["Docker Network (msqpay-network)"]
+        subgraph Infra["인프라"]
+            MySQL[(MySQL 8.0<br/>:3306)]
+            Redis[(Redis 7<br/>:6379)]
+        end
+
+        subgraph Blockchain["블록체인"]
+            Hardhat[Hardhat Node<br/>:8545]
+        end
+
+        subgraph Apps["애플리케이션"]
+            Server[Payment Server<br/>Fastify :3001]
+            Demo[Demo App<br/>Next.js :3000]
+        end
+    end
+
+    Server --> MySQL
+    Server --> Redis
+    Server --> Hardhat
+    Demo --> Server
+```
+
+### 서비스 구성
+
+| 서비스 | 이미지/타겟 | 포트 | 용도 |
+|--------|------------|------|------|
+| mysql | mysql:8.0 | 3306 | 결제 데이터 |
+| redis | redis:7-alpine | 6379 | 캐싱 |
+| hardhat | Dockerfile.packages:hardhat | 8545 | 로컬 블록체인 |
+| server | Dockerfile.packages:server | 3001 | Payment API |
+| demo | Dockerfile.packages:demo | 3000 | 프론트엔드 |
+
+### 의존성 순서
+
+```
+mysql + redis + hardhat (병렬 시작, healthcheck)
+         ↓
+      server (depends_on: service_healthy)
+         ↓
+       demo (depends_on: service_started)
+```
+
+### 환경변수 (하드코딩)
+
+Docker Compose 파일에 모든 환경변수가 직접 포함되어 있습니다:
+
+- **MySQL**: root/pass
+- **Contract 주소**: Hardhat 결정론적 주소 사용
+- **API Keys**: 테스트용 키 직접 포함
+
+---
+
 ## 3. 결제서버 API
 
 ### 3.1 API 목록
