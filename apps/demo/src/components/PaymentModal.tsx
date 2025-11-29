@@ -1,13 +1,27 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useAccount, useWalletClient, usePublicClient, useChainId } from "wagmi";
-import { parseUnits, formatUnits, keccak256, toHex } from "viem";
+import { useState, useEffect, useCallback } from "react";
+import {
+  useAccount,
+  useWalletClient,
+  useChainId,
+  useReadContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
+import { parseUnits, formatUnits, keccak256, toHex, type Address } from "viem";
 import { getTokenForChain, getContractsForChain } from "@/lib/wagmi";
 import { DEMO_MERCHANT_ADDRESS } from "@/lib/constants";
+import { getPaymentStatus } from "@/lib/api";
 
-// Simplified ABI for demo
+// ERC20 ABI with view functions for balance/allowance queries
 const ERC20_ABI = [
+  {
+    type: "function",
+    name: "balanceOf",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
   {
     type: "function",
     name: "allowance",
@@ -28,13 +42,6 @@ const ERC20_ABI = [
     outputs: [{ name: "", type: "bool" }],
     stateMutability: "nonpayable",
   },
-  {
-    type: "function",
-    name: "balanceOf",
-    inputs: [{ name: "account", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }],
-    stateMutability: "view",
-  },
 ] as const;
 
 const PAYMENT_GATEWAY_ABI = [
@@ -52,8 +59,6 @@ const PAYMENT_GATEWAY_ABI = [
   },
 ] as const;
 
-
-
 interface Product {
   id: string;
   name: string;
@@ -69,7 +74,6 @@ interface PaymentModalProps {
 
 type PaymentStatus =
   | "idle"
-  | "checking"
   | "approving"
   | "approved"
   | "paying"
@@ -78,58 +82,97 @@ type PaymentStatus =
 
 type GasMode = "direct" | "gasless";
 
-
-export function PaymentModal({ product, onClose, onSuccess }: PaymentModalProps) {
+export function PaymentModal({
+  product,
+  onClose,
+  onSuccess,
+}: PaymentModalProps) {
   const { address } = useAccount();
   const { data: walletClient } = useWalletClient();
-  const publicClient = usePublicClient();
   const chainId = useChainId();
 
   const [gasMode, setGasMode] = useState<GasMode>("direct");
   const [status, setStatus] = useState<PaymentStatus>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [txHash, setTxHash] = useState<string | null>(null);
-  const [balance, setBalance] = useState<bigint>(BigInt(0));
-  const [allowance, setAllowance] = useState<bigint>(BigInt(0));
+  const [pendingTxHash, setPendingTxHash] = useState<Address | undefined>(
+    undefined
+  );
+  const [approveTxHash, setApproveTxHash] = useState<Address | undefined>(
+    undefined
+  );
+  const [currentPaymentId, setCurrentPaymentId] = useState<string | null>(null);
 
   const amount = parseUnits(product.price, 18);
   const token = getTokenForChain(chainId);
   const contracts = getContractsForChain(chainId);
 
-  // Check balance and allowance on mount
-  useEffect(() => {
-    async function checkBalanceAndAllowance() {
-      if (!address || !publicClient || !token || !contracts) return;
+  // Read token balance using wagmi hook (MetaMask handles RPC)
+  const { data: balance, isLoading: balanceLoading } = useReadContract({
+    address: token?.address as Address,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: {
+      enabled: !!address && !!token,
+    },
+  });
 
-      try {
-        setStatus("checking");
+  // Read token allowance using wagmi hook (MetaMask handles RPC)
+  const { data: allowance, refetch: refetchAllowance } = useReadContract({
+    address: token?.address as Address,
+    abi: ERC20_ABI,
+    functionName: "allowance",
+    args: address && contracts ? [address, contracts.gateway as Address] : undefined,
+    query: {
+      enabled: !!address && !!token && !!contracts,
+    },
+  });
 
-        const [bal, allow] = await Promise.all([
-          publicClient.readContract({
-            address: token.address,
-            abi: ERC20_ABI,
-            functionName: "balanceOf",
-            args: [address],
-          }),
-          publicClient.readContract({
-            address: token.address,
-            abi: ERC20_ABI,
-            functionName: "allowance",
-            args: [address, contracts.gateway],
-          }),
-        ]);
+  // Wait for APPROVE transaction confirmation using wagmi hook
+  // (Only for approve TX - payment TX is verified via server API)
+  const { isLoading: approveTxLoading, isSuccess: approveTxSuccess } =
+    useWaitForTransactionReceipt({
+      hash: approveTxHash,
+    });
 
-        setBalance(bal as bigint);
-        setAllowance(allow as bigint);
-        setStatus(allow >= amount ? "approved" : "idle");
-      } catch (err) {
-        console.error("Error checking balance:", err);
-        setStatus("idle");
+  // Poll server for payment status (Contract = Source of Truth)
+  const pollPaymentStatus = useCallback(async (paymentId: string): Promise<void> => {
+    const maxAttempts = 30;
+    const interval = 2000; // 2 seconds
+
+    for (let i = 0; i < maxAttempts; i++) {
+      const response = await getPaymentStatus(paymentId);
+
+      if (response.success && response.data) {
+        if (response.data.status === 'completed' || response.data.status === 'confirmed') {
+          return;
+        }
+        if (response.data.status === 'failed') {
+          throw new Error('Payment failed on server');
+        }
       }
+
+      await new Promise(resolve => setTimeout(resolve, interval));
     }
 
-    checkBalanceAndAllowance();
-  }, [address, publicClient, amount, token, contracts]);
+    throw new Error('Payment confirmation timeout');
+  }, []);
+
+  // Handle APPROVE transaction success
+  useEffect(() => {
+    if (approveTxSuccess && approveTxHash && status === "approving") {
+      refetchAllowance();
+      setStatus("approved");
+      setApproveTxHash(undefined);
+    }
+  }, [approveTxSuccess, approveTxHash, status, refetchAllowance]);
+
+  // Update status based on allowance
+  useEffect(() => {
+    if (allowance !== undefined && allowance >= amount && status === "idle") {
+      setStatus("approved");
+    }
+  }, [allowance, amount, status]);
 
   // Generate unique payment ID
   const generatePaymentId = () => {
@@ -146,58 +189,63 @@ export function PaymentModal({ product, onClose, onSuccess }: PaymentModalProps)
       setError(null);
 
       const hash = await walletClient.writeContract({
-        address: token.address,
+        address: token.address as Address,
         abi: ERC20_ABI,
         functionName: "approve",
-        args: [contracts.gateway, amount],
+        args: [contracts.gateway as Address, amount],
       });
 
-      // Wait for confirmation
-      await publicClient?.waitForTransactionReceipt({ hash });
-
-      setAllowance(amount);
-      setStatus("approved");
-    } catch (err: any) {
+      setApproveTxHash(hash);
+    } catch (err: unknown) {
       console.error("Approval error:", err);
-      setError(err.message || "Approval failed");
+      const message = err instanceof Error ? err.message : "Approval failed";
+      setError(message);
       setStatus("error");
     }
   };
 
   // Handle direct payment
   const handleDirectPayment = async () => {
-    if (!walletClient || !address || !publicClient || !token || !contracts) return;
+    if (!walletClient || !address || !token || !contracts) return;
 
     try {
       setStatus("paying");
       setError(null);
 
       const paymentId = generatePaymentId();
+      setCurrentPaymentId(paymentId);
 
+      // 1. Send payment TX to Contract
       const hash = await walletClient.writeContract({
-        address: contracts.gateway,
+        address: contracts.gateway as Address,
         abi: PAYMENT_GATEWAY_ABI,
         functionName: "pay",
-        args: [paymentId, token.address, amount, DEMO_MERCHANT_ADDRESS],
+        args: [
+          paymentId,
+          token.address as Address,
+          amount,
+          DEMO_MERCHANT_ADDRESS as Address,
+        ],
       });
 
-      setTxHash(hash);
+      setPendingTxHash(hash);
 
-      // Wait for confirmation
-      await publicClient.waitForTransactionReceipt({ hash });
+      // 2. Poll server for payment confirmation (Contract = Source of Truth)
+      // Server queries contract.processedPayments[paymentId] to verify
+      await pollPaymentStatus(paymentId);
 
+      // 3. Payment confirmed by server
       setStatus("success");
-
-      // Call onSuccess callback and close modal after a short delay
       if (onSuccess) {
         onSuccess(hash);
       }
       setTimeout(() => {
         onClose();
       }, 1500);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Payment error:", err);
-      setError(err.message || "Payment failed");
+      const message = err instanceof Error ? err.message : "Payment failed";
+      setError(message);
       setStatus("error");
     }
   };
@@ -221,8 +269,11 @@ export function PaymentModal({ product, onClose, onSuccess }: PaymentModalProps)
     }
   };
 
-  const hasInsufficientBalance = balance < amount;
-  const needsApproval = allowance < amount;
+  const currentBalance = balance ?? BigInt(0);
+  const currentAllowance = allowance ?? BigInt(0);
+  const hasInsufficientBalance = currentBalance < amount;
+  const needsApproval = currentAllowance < amount;
+  const isLoading = balanceLoading || approveTxLoading;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -261,7 +312,9 @@ export function PaymentModal({ product, onClose, onSuccess }: PaymentModalProps)
               <span className="text-gray-600 dark:text-gray-400">
                 {product.name}
               </span>
-              <span className="font-semibold">{product.price} {token?.symbol || "TOKEN"}</span>
+              <span className="font-semibold">
+                {product.price} {token?.symbol || "TOKEN"}
+              </span>
             </div>
           </div>
 
@@ -270,7 +323,7 @@ export function PaymentModal({ product, onClose, onSuccess }: PaymentModalProps)
             <div className="flex justify-between text-gray-600 dark:text-gray-400">
               <span>Your {token?.symbol || "TOKEN"} Balance:</span>
               <span className={hasInsufficientBalance ? "text-red-500" : ""}>
-                {formatUnits(balance, 18)} {token?.symbol || "TOKEN"}
+                {formatUnits(currentBalance, 18)} {token?.symbol || "TOKEN"}
               </span>
             </div>
             {hasInsufficientBalance && (
@@ -317,13 +370,13 @@ export function PaymentModal({ product, onClose, onSuccess }: PaymentModalProps)
           )}
 
           {/* Success message */}
-          {status === "success" && txHash && (
+          {status === "success" && pendingTxHash && (
             <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
               <p className="text-sm text-green-700 dark:text-green-300 font-medium">
                 Payment successful!
               </p>
               <a
-                href={`https://amoy.polygonscan.com/tx/${txHash}`}
+                href={`https://amoy.polygonscan.com/tx/${pendingTxHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs text-primary-600 hover:underline"
@@ -342,7 +395,7 @@ export function PaymentModal({ product, onClose, onSuccess }: PaymentModalProps)
                   onClick={handleApprove}
                   disabled={
                     status === "approving" ||
-                    status === "checking" ||
+                    isLoading ||
                     hasInsufficientBalance
                   }
                   className="w-full py-3 bg-gray-800 text-white rounded-lg hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -360,7 +413,7 @@ export function PaymentModal({ product, onClose, onSuccess }: PaymentModalProps)
                   hasInsufficientBalance ||
                   (needsApproval && gasMode === "direct") ||
                   status === "paying" ||
-                  status === "checking"
+                  isLoading
                 }
                 className="w-full py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >

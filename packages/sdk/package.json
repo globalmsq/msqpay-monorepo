@@ -1,54 +1,22 @@
 {
-  "name": "@msq/pay-sdk",
+  "name": "@globalmsq/msqpay",
   "version": "0.1.0",
-  "description": "MSQ Pay Onchain SDK - TypeScript SDK for blockchain payments",
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
-  },
-  "files": [
-    "dist",
-    "src"
-  ],
+  "description": "MSQPay SDK for store servers",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
   "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
-    "test": "vitest",
-    "test:coverage": "vitest --coverage",
-    "lint": "eslint src/",
-    "clean": "rm -rf dist",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "viem": "^2.21.0"
+    "build": "tsc",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "tsup": "^8.0.0",
-    "typescript": "^5.4.0",
-    "vitest": "^2.0.0"
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.0",
+    "@vitest/coverage-v8": "^2.1.0"
   },
-  "peerDependencies": {
-    "viem": "^2.0.0"
+  "engines": {
+    "node": ">=18.0.0"
   },
-  "keywords": [
-    "blockchain",
-    "payment",
-    "polygon",
-    "erc20",
-    "meta-transaction",
-    "sdk"
-  ],
-  "author": "MSQ Team",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/mufin/msqpay-monorepo"
-  }
+  "license": "MIT"
 }

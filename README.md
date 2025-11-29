@@ -147,7 +147,7 @@ PaymentGateway: 0x...
 ERC2771Forwarder: 0x...
 ```
 
-## SDK Usage
+## SDK Usage (@globalmsq/msqpay)
 
 ```typescript
 import { MSQPayClient } from '@globalmsq/msqpay';
@@ -160,34 +160,87 @@ const client = new MSQPayClient({
 
 // 결제 생성
 const payment = await client.createPayment({
-  orderId: 'order_123',
-  amount: '1000000000000000000',
-  token: '0xE4C...',
-  merchant: '0x...'
+  userId: 'user_123',
+  amount: 1000,
+  currency: 'USD',
+  tokenAddress: '0xE4C687167705Abf55d709395f92e254bdF5825a2',
+  recipientAddress: '0x...'
 });
 
 // 상태 조회
 const status = await client.getPaymentStatus(payment.paymentId);
 
-// Gasless 데이터 요청
-const gaslessData = await client.getGaslessData(payment.paymentId, userAddress);
+// Gasless 거래 제출
+const gaslessResult = await client.submitGasless({
+  paymentId: payment.paymentId,
+  forwarderAddress: '0x...',
+  signature: '0x...'
+});
 
-// 서명 제출
-const result = await client.submitGaslessSignature(
-  payment.paymentId,
-  signature,
-  gaslessData.forwardRequest
-);
+// Relay 거래 실행
+const relayResult = await client.executeRelay({
+  paymentId: payment.paymentId,
+  transactionData: '0x...',
+  gasEstimate: 100000
+});
 ```
 
+**상세 문서**: [SDK README](./packages/sdk/README.md)
+
 ## Payment Server API
+
+### 엔드포인트
 
 | 엔드포인트 | 메서드 | 용도 |
 |-----------|--------|------|
 | `/payments/create` | POST | 결제 생성, paymentId 발급 |
 | `/payments/:id/status` | GET | 결제 상태 조회 (Contract 조회) |
-| `/payments/:id/gasless` | GET | Gasless 서명 데이터 조회 |
-| `/payments/:id/relay` | POST | Gasless 서명 제출 → Relay |
+| `/payments/:id/gasless` | POST | Gasless 거래 제출 |
+| `/payments/:id/relay` | POST | 릴레이 거래 실행 |
+| `/payments/:id/history` | GET | 결제 이력 조회 |
+| `/tokens/balance` | GET | 토큰 잔액 조회 |
+| `/tokens/allowance` | GET | 토큰 approval 금액 조회 |
+| `/transactions/:id/status` | GET | 거래 상태 조회 |
+
+### 최근 추가 기능
+
+#### Payment History API
+사용자의 결제 이력을 블록체인에서 조회합니다:
+- **엔드포인트**: `GET /payments/:id/history`
+- **기능**: 결제 ID에 따른 거래 이력 조회
+- **응답**: 거래 해시, 상태, 타임스탬프, 확인 수
+
+#### Token Balance/Allowance API
+ERC-20 토큰의 지갑 상태를 조회합니다:
+- **엔드포인트**: `GET /tokens/balance?tokenAddress={addr}&address={wallet}`
+- **기능**: 사용자 지갑의 토큰 잔액 조회
+- **엔드포인트**: `GET /tokens/allowance?tokenAddress={addr}&owner={addr}&spender={addr}`
+- **기능**: 토큰 approval 금액 조회
+
+#### Transaction Status API
+거래 상태와 확인 정보를 조회합니다:
+- **엔드포인트**: `GET /transactions/:id/status`
+- **기능**: 트랜잭션 해시로 상태, 블록 번호, 확인 수 조회
+- **상태값**: `pending` (대기), `confirmed` (확인됨), `failed` (실패)
+
+### 환경 변수 통일
+
+결제 서버의 환경 변수는 다음과 같이 통일되었습니다:
+
+| 변수 | 용도 | 예시 |
+|------|------|------|
+| `BLOCKCHAIN_RPC_URL` | 블록체인 RPC 엔드포인트 | `https://polygon-rpc.com` |
+| `GATEWAY_ADDRESS` | PaymentGateway 계약 주소 | `0x...` |
+| `DEFENDER_RELAYER_ADDRESS` | OpenZeppelin Defender 릴레이 주소 | `0x...` |
+| `DEFENDER_API_KEY` | Defender API 키 | `sk_...` |
+| `DEFENDER_API_SECRET` | Defender API 시크릿 | `secret_...` |
+
+### 상세 문서
+
+- **[API 레퍼런스](./docs/api/payments.md)** - 모든 엔드포인트의 요청/응답 포맷, 사용 예제
+- **[아키텍처 가이드](./docs/architecture-payments.md)** - 시스템 설계, Mermaid 다이어그램, 무상태 설계 원칙
+- **[구현 가이드](./docs/implementation/payments-api.md)** - BlockchainService, DefenderService 사용 방법, 테스트 작성 패턴
+- **[배포 가이드](./docs/deployment/payments-setup.md)** - 프로덕션 배포, 환경 설정, Docker, 클라우드 배포
 
 ## Documentation
 
@@ -195,6 +248,8 @@ const result = await client.submitGaslessSignature(
 - [Technical Specification](./docs/technical-spec.md)
 - [Architecture](./docs/architecture.md)
 - [Implementation Plan](./docs/implementation-plan.md)
+- **[Payment API Documentation](./docs/api/payments.md)** ⭐ (New - SPEC-SERVER-002)
+- **[Payment Architecture](./docs/architecture-payments.md)** ⭐ (New - SPEC-SERVER-002)
 
 ## Tech Stack
 
@@ -202,8 +257,10 @@ const result = await client.submitGaslessSignature(
 |-----------|------------|
 | Smart Contract | Solidity 0.8.24, OpenZeppelin 5.x |
 | Contract Framework | Hardhat |
-| Payment Server | Node.js, Fastify |
-| SDK | TypeScript, axios |
+| Payment Server | Node.js, Fastify v5, viem v2.21 |
+| Payment Server Tests | Vitest, 65+ test cases, 82.89% coverage |
+| SDK | TypeScript, Node 18+ native fetch (no dependencies) |
+| SDK Tests | Vitest, 26+ test cases, 100% coverage |
 | Relay | OpenZeppelin Defender |
 | Demo App | Next.js 14, wagmi, RainbowKit |
 | Package Manager | pnpm |

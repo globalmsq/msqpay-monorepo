@@ -1,27 +1,11 @@
 "use client";
 
 import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
-import { useAccount, usePublicClient, useChainId } from "wagmi";
-import { formatUnits, parseAbiItem } from "viem";
-import { getSubgraphUrl, getContractsForChain, getTokenForChain } from "@/lib/wagmi";
-import { RECENT_BLOCKS_SCAN_LIMIT, SUBGRAPH_QUERY_LIMIT } from "@/lib/constants";
+import { useAccount, useChainId } from "wagmi";
+import { formatUnits } from "viem";
+import { getTokenForChain } from "@/lib/wagmi";
+import { getPaymentHistory, PaymentHistoryItem } from "@/lib/api";
 import { truncateAddress, truncateHash, formatTimestamp } from "@/lib/utils";
-
-interface Payment {
-  id: string;
-  paymentId: string;
-  payer: string;
-  merchant: string;
-  token: string;
-  amount: string;
-  timestamp: string;
-  transactionHash: string;
-}
-
-// PaymentCompleted event ABI
-const PAYMENT_COMPLETED_EVENT = parseAbiItem(
-  "event PaymentCompleted(bytes32 indexed paymentId, address indexed payer, address indexed merchant, address token, uint256 amount, uint256 timestamp)"
-);
 
 // Ref type for parent component
 export interface PaymentHistoryRef {
@@ -30,105 +14,14 @@ export interface PaymentHistoryRef {
 
 export const PaymentHistory = forwardRef<PaymentHistoryRef>(function PaymentHistory(_, ref) {
   const { address } = useAccount();
-  const publicClient = usePublicClient();
   const chainId = useChainId();
-  const [payments, setPayments] = useState<Payment[]>([]);
+  const [payments, setPayments] = useState<PaymentHistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const contracts = getContractsForChain(chainId);
   const token = getTokenForChain(chainId);
-  const subgraphUrl = getSubgraphUrl(chainId);
 
-  // Fetch payments from blockchain events (fallback when no subgraph)
-  const fetchFromBlockchain = async () => {
-    if (!address || !publicClient || !contracts) return;
-
-    try {
-      // Only scan recent blocks for performance
-      const currentBlock = await publicClient.getBlockNumber();
-      const fromBlock = currentBlock > BigInt(RECENT_BLOCKS_SCAN_LIMIT)
-        ? currentBlock - BigInt(RECENT_BLOCKS_SCAN_LIMIT)
-        : BigInt(0);
-
-      const logs = await publicClient.getLogs({
-        address: contracts.gateway,
-        event: PAYMENT_COMPLETED_EVENT,
-        args: {
-          payer: address,
-        },
-        fromBlock,
-        toBlock: "latest",
-      });
-
-      const paymentsList: Payment[] = await Promise.all(
-        logs.map(async (log) => {
-          const block = await publicClient.getBlock({ blockHash: log.blockHash! });
-          return {
-            id: `${log.transactionHash}-${log.logIndex}`,
-            paymentId: log.args.paymentId || "",
-            payer: log.args.payer || "",
-            merchant: log.args.merchant || "",
-            token: log.args.token || "",
-            amount: (log.args.amount || BigInt(0)).toString(),
-            timestamp: block.timestamp.toString(),
-            transactionHash: log.transactionHash,
-          };
-        })
-      );
-
-      // Sort by timestamp descending
-      paymentsList.sort((a, b) => parseInt(b.timestamp) - parseInt(a.timestamp));
-      setPayments(paymentsList);
-    } catch (err: any) {
-      console.error("Error fetching from blockchain:", err);
-      throw err;
-    }
-  };
-
-  // Fetch payments from Subgraph (for testnets/mainnet)
-  const fetchFromSubgraph = async () => {
-    const subgraphUrl = getSubgraphUrl(chainId);
-    if (!address || !subgraphUrl) {
-      throw new Error("Subgraph not configured for this chain");
-    }
-
-    const query = `
-      query GetUserPayments($payer: Bytes!) {
-        payments(
-          where: { payer: $payer }
-          orderBy: timestamp
-          orderDirection: desc
-          first: ${SUBGRAPH_QUERY_LIMIT}
-        ) {
-          id
-          paymentId
-          payer
-          merchant
-          token
-          amount
-          timestamp
-          transactionHash
-        }
-      }
-    `;
-
-    const response = await fetch(subgraphUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query,
-        variables: { payer: address.toLowerCase() },
-      }),
-    });
-
-    const result = await response.json();
-    if (result.errors) {
-      throw new Error(result.errors[0]?.message || "Subgraph query failed");
-    }
-    setPayments(result.data?.payments || []);
-  };
-
+  // Fetch payments from Payment API
   const fetchPayments = async () => {
     if (!address) return;
 
@@ -136,10 +29,12 @@ export const PaymentHistory = forwardRef<PaymentHistoryRef>(function PaymentHist
     setError(null);
 
     try {
-      if (subgraphUrl) {
-        await fetchFromSubgraph();
+      const response = await getPaymentHistory(address);
+
+      if (response.success && response.data) {
+        setPayments(response.data);
       } else {
-        await fetchFromBlockchain();
+        setError(response.message || "Failed to fetch payments");
       }
     } catch (err: any) {
       setError(err.message || "Failed to fetch payments");
@@ -173,7 +68,7 @@ export const PaymentHistory = forwardRef<PaymentHistoryRef>(function PaymentHist
         <div>
           <h3 className="font-semibold">Recent Payments</h3>
           <p className="text-xs text-gray-500">
-            {subgraphUrl ? "From Subgraph" : `Recent ${RECENT_BLOCKS_SCAN_LIMIT} blocks`}
+            From Payment API
           </p>
         </div>
         <button
