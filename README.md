@@ -147,7 +147,7 @@ PaymentGateway: 0x...
 ERC2771Forwarder: 0x...
 ```
 
-## SDK Usage
+## SDK Usage (@globalmsq/msqpay)
 
 ```typescript
 import { MSQPayClient } from '@globalmsq/msqpay';
@@ -160,25 +160,32 @@ const client = new MSQPayClient({
 
 // 결제 생성
 const payment = await client.createPayment({
-  orderId: 'order_123',
-  amount: '1000000000000000000',
-  token: '0xE4C...',
-  merchant: '0x...'
+  userId: 'user_123',
+  amount: 1000,
+  currency: 'USD',
+  tokenAddress: '0xE4C687167705Abf55d709395f92e254bdF5825a2',
+  recipientAddress: '0x...'
 });
 
 // 상태 조회
 const status = await client.getPaymentStatus(payment.paymentId);
 
-// Gasless 데이터 요청
-const gaslessData = await client.getGaslessData(payment.paymentId, userAddress);
+// Gasless 거래 제출
+const gaslessResult = await client.submitGasless({
+  paymentId: payment.paymentId,
+  forwarderAddress: '0x...',
+  signature: '0x...'
+});
 
-// 서명 제출
-const result = await client.submitGaslessSignature(
-  payment.paymentId,
-  signature,
-  gaslessData.forwardRequest
-);
+// Relay 거래 실행
+const relayResult = await client.executeRelay({
+  paymentId: payment.paymentId,
+  transactionData: '0x...',
+  gasEstimate: 100000
+});
 ```
+
+**상세 문서**: [SDK README](./packages/sdk/README.md)
 
 ## Payment Server API
 
@@ -213,8 +220,10 @@ const result = await client.submitGaslessSignature(
 |-----------|------------|
 | Smart Contract | Solidity 0.8.24, OpenZeppelin 5.x |
 | Contract Framework | Hardhat |
-| Payment Server | Node.js, Fastify |
-| SDK | TypeScript, axios |
+| Payment Server | Node.js, Fastify v5, viem v2.21 |
+| Payment Server Tests | Vitest, 65+ test cases, 82.89% coverage |
+| SDK | TypeScript, Node 18+ native fetch (no dependencies) |
+| SDK Tests | Vitest, 26+ test cases, 100% coverage |
 | Relay | OpenZeppelin Defender |
 | Demo App | Next.js 14, wagmi, RainbowKit |
 | Package Manager | pnpm |

@@ -1,7 +1,7 @@
 # MSQPay Monorepo - Remaining Tasks
 
 Last Updated: 2025-11-29
-Status: Payment API Implementation Complete (SPEC-SERVER-002)
+Status: Payment API & SDK Implementation Complete (SPEC-SERVER-002 ✅ SPEC-SDK-001 ✅)
 
 ## Current State
 
@@ -31,6 +31,19 @@ Status: Payment API Implementation Complete (SPEC-SERVER-002)
     - [x] 구현 가이드 (docs/implementation/payments-api.md)
     - [x] 배포 가이드 (docs/deployment/payments-setup.md)
     - [x] README 및 REMAINING_TASKS 업데이트
+- [x] **SPEC-SDK-001: Store Server Payment SDK (@globalmsq/msqpay)** (TDD, TypeScript, Vitest)
+  - [x] 4개 API 메서드 (createPayment, getPaymentStatus, submitGasless, executeRelay)
+  - [x] 26개 테스트 케이스 통과, 100% 커버리지
+  - [x] MSQPayError 에러 처리 클래스
+  - [x] 환경별 URL 관리 (development, staging, production, custom)
+  - [x] X-API-Key 인증 헤더
+  - [x] Node 18+ native fetch (외부 의존성 0개)
+  - [x] TypeScript 0 컴파일 에러
+  - [x] **문서화 완료 (SPEC-SDK-001)**
+    - [x] SDK README (설치, 초기화, 사용 예제)
+    - [x] SPEC 문서 (타입, API, 에러 처리)
+    - [x] 구현 계획 (6개 Phase)
+    - [x] 수락 조건 (8개 테스트 케이스)
 
 ### Architecture Summary
 
@@ -57,30 +70,21 @@ Status: Payment API Implementation Complete (SPEC-SERVER-002)
 
 ## Remaining Tasks
 
-### Priority 1: 결제서버 개발 (MVP)
+### ✅ Priority 1: 결제서버 개발 (MVP) - COMPLETED
 
-**신규 구현 필요**
+**SPEC-SERVER-002 완료**
 
-**기술 스택**:
-- Node.js + Fastify (또는 Express)
-- viem (Contract 조회)
-- OZ Defender SDK (Gasless Relay)
+**구현 사항**:
+- ✅ Node.js + Fastify 기반 결제서버
+- ✅ viem을 통한 Contract 상태 조회
+- ✅ OpenZeppelin Defender SDK 연동
+- ✅ 4개 API 엔드포인트 (create, status, gasless, relay)
+- ✅ BlockchainService & DefenderService 구현
+- ✅ Zod 기반 검증 스키마
+- ✅ 65개 테스트 통과, 82.89% 커버리지
+- ✅ TypeScript strict mode 통과
 
-**API 엔드포인트**:
-| 엔드포인트 | 용도 |
-|-----------|------|
-| `POST /payments/create` | 결제 생성, paymentId 발급 |
-| `GET /payments/:id/status` | 결제 상태 조회 (Contract 조회) |
-| `GET /payments/:id/gasless` | Gasless 서명 데이터 조회 |
-| `POST /payments/:id/relay` | Gasless 서명 제출 → Relay |
-
-**MVP에서 제외**:
-- DB/Redis
-- 이벤트 모니터링
-- 금액 검증
-- 만료 처리
-
-**예상 파일 구조**:
+**생성된 파일 구조**:
 ```
 packages/server/
 ├── src/
@@ -88,83 +92,75 @@ packages/server/
 │   ├── routes/
 │   │   └── payments.ts        # 결제 API
 │   ├── services/
-│   │   ├── payment.service.ts # paymentId 생성, 상태 조회
-│   │   ├── gasless.service.ts # typedData 생성
-│   │   └── relay.service.ts   # OZ Defender 연동
+│   │   ├── blockchain.service.ts
+│   │   └── defender.service.ts
+│   ├── schemas/
+│   │   └── payments.schema.ts # Zod 검증
 │   └── lib/
 │       ├── viem.ts            # viem 클라이언트
 │       └── config.ts          # 환경변수
+├── tests/
+│   └── payments.test.ts       # 65개 테스트
 ├── package.json
 └── tsconfig.json
 ```
 
 ---
 
-### Priority 2: SDK 개발 (`@globalmsq/msqpay`)
+### ✅ Priority 2: SDK 개발 (`@globalmsq/msqpay`) - COMPLETED
 
-**신규 구현 필요**
+**SPEC-SDK-001 완료**
 
-**클래스 구조**:
-```typescript
-class MSQPayClient {
-  constructor(config: MSQPayConfig);
+**구현 사항**:
+- ✅ MSQPayClient 클래스 (Node 18+ native fetch)
+- ✅ 4개 API 메서드 (createPayment, getPaymentStatus, submitGasless, executeRelay)
+- ✅ MSQPayError 에러 처리
+- ✅ 환경별 URL 관리 (development, staging, production, custom)
+- ✅ X-API-Key 인증 헤더
+- ✅ 26개 테스트 케이스, 100% 커버리지
+- ✅ TypeScript strict mode 통과
+- ✅ 외부 의존성 0개 (native fetch만 사용)
 
-  // URL 관리
-  setApiUrl(url: string): void;
-  getApiUrl(): string;
-
-  // 공통
-  createPayment(params: CreatePaymentParams): Promise<Payment>;
-  getPaymentStatus(paymentId: string): Promise<PaymentStatus>;
-
-  // Gasless
-  getGaslessData(paymentId: string, userAddress: string): Promise<GaslessData>;
-  submitGaslessSignature(paymentId: string, signature: string, forwardRequest: ForwardRequest): Promise<RelayResult>;
-}
-```
-
-**환경 설정**:
-```typescript
-type Environment = 'development' | 'staging' | 'production' | 'custom';
-
-const API_URLS = {
-  development: 'http://localhost:3001',
-  staging: 'https://pay-api.staging.msq.com',
-  production: 'https://pay-api.msq.com'
-};
-```
-
-**예상 파일 구조**:
+**생성된 파일 구조**:
 ```
 packages/sdk/
 ├── src/
 │   ├── index.ts               # 메인 export
 │   ├── client.ts              # MSQPayClient 클래스
 │   ├── types.ts               # TypeScript 타입
-│   └── constants.ts           # 환경별 URL
-├── package.json               # @globalmsq/msqpay
+│   ├── constants.ts           # 환경별 URL
+│   └── errors.ts              # MSQPayError 클래스
+├── tests/
+│   └── client.test.ts         # 26개 테스트
+├── README.md                  # SDK 문서
+├── package.json               # @globalmsq/msqpay v0.1.0
 └── tsconfig.json
 ```
 
 ---
 
-### Priority 3: Demo App 수정
+### Priority 3: Demo App 통합
 
 **Location**: `apps/demo/`
 
-**변경 사항**:
+**필요한 변경**:
 
-1. **결제 플로우 수정**
+1. **SDK 통합**
+   - `@globalmsq/msqpay` 패키지 임포트
+   - MSQPayClient 초기화 (development 환경)
+   - API 호출 플로우 연동
+
+2. **결제 플로우 수정**
    - 기존: 클라이언트에서 paymentId 생성
-   - 신규: 상점서버(시뮬레이션) → 결제서버에서 paymentId 받기
+   - 신규: SDK를 통해 서버에서 paymentId 받기
 
-2. **상태 확인 방식**
+3. **상태 확인 방식**
    - 기존: 클라이언트에서 블록체인 직접 확인
-   - 신규: 서버 API polling
+   - 신규: SDK를 통해 서버 API polling
 
-3. **샘플 코드 제공**
-   - Direct Payment (wagmi useWriteContract)
-   - Gasless Payment (wagmi useSignTypedData)
+4. **샘플 코드 제공**
+   - Direct Payment (wagmi useWriteContract + SDK)
+   - Gasless Payment (wagmi useSignTypedData + SDK)
    - Approve (1회 무한 승인)
 
 ---
