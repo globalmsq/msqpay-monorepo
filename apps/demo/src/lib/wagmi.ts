@@ -1,5 +1,4 @@
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
-import { http } from "wagmi";
 import { polygonAmoy, hardhat } from "wagmi/chains";
 
 // WalletConnect Project ID - Get one at https://cloud.walletconnect.com/
@@ -9,10 +8,6 @@ export const config = getDefaultConfig({
   appName: "MSQ Pay Demo",
   projectId,
   chains: [polygonAmoy, hardhat],
-  transports: {
-    [polygonAmoy.id]: http("https://rpc-amoy.polygon.technology"),
-    [hardhat.id]: http("http://127.0.0.1:8545"),
-  },
   ssr: true,
 });
 

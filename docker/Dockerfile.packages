@@ -80,9 +80,25 @@ EXPOSE 3001
 CMD ["node", "dist/index.js"]
 
 # ============================================
+# SDK Builder Stage (for demo dependency)
+# ============================================
+FROM deps AS sdk-builder
+
+# Copy SDK source
+COPY packages/sdk ./packages/sdk
+
+WORKDIR /app/packages/sdk
+
+# Build SDK
+RUN pnpm build
+
+# ============================================
 # Demo Builder Stage
 # ============================================
 FROM deps AS demo-builder
+
+# Copy built SDK from sdk-builder
+COPY --from=sdk-builder /app/packages/sdk ./packages/sdk
 
 # Copy demo source
 COPY apps/demo ./apps/demo

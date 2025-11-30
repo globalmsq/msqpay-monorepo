@@ -94,6 +94,8 @@ services:
       NEXT_PUBLIC_CHAIN_ID: 31337
       NEXT_PUBLIC_RPC_URL: http://localhost:8545
       NEXT_PUBLIC_API_URL: http://localhost:3001
+      # Server-side API URL (Docker internal network)
+      MSQPAY_API_URL: http://server:3001
     depends_on:
       - server
     networks:

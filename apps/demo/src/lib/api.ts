@@ -3,7 +3,7 @@
  * Demo App에서 Payment API Server를 호출하는 유틸 함수
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_URL = '/api';
 
 // 결제 상태 타입 (서버 응답과 일치)
 export interface PaymentStatus {
