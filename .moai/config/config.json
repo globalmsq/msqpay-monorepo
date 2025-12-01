@@ -1,6 +1,6 @@
 {
   "project": {
-    "name": "msq-pay-onchain",
+    "name": "msqpay-monorepo",
     "mode": "personal",
     "locale": "ko",
     "language": "generic",
@@ -14,16 +14,17 @@
     "description": "{{PROJECT_DESCRIPTION}}",
     "owner": "@user",
     "created_at": "{{CREATED_AT}}",
-    "initialized": true,
-    "optimized": false,
-    "optimized_at": null,
-    "_notes": "optimized=false: Template updated, config merge required. optimized=true: Configuration fully merged and verified."
+    "initialized": true
   },
   "language": {
     "conversation_language": "ko",
     "conversation_language_name": "Korean",
-    "agent_prompt_language": "ko",
-    "notes": "Language for sub-agent internal prompts (english=global standard, localized=user's conversation language)"
+    "agent_prompt_language": "en",
+    "git_commit_messages": "en",
+    "code_comments": "en",
+    "documentation": "ko",
+    "error_messages": "en",
+    "notes": "Language settings: conversation_language (user interaction), agent_prompt_language (internal prompts), git_commit_messages (git commits), code_comments (source code), documentation (docs), error_messages (user error messages)"
   },
   "constitution": {
     "enforce_tdd": true,
@@ -72,7 +73,7 @@
     "notes": "suppress_setup_messages: false enables SessionStart output. Set to true to suppress messages (show again after 7 days)"
   },
   "moai": {
-    "version": "0.28.0",
+    "version": "0.30.2",
     "update_check_frequency": "daily",
     "version_check": {
       "enabled": true,

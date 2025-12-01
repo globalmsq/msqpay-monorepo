@@ -20,17 +20,6 @@
         ]
       }
     ],
-    "PreToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/moai/pre_tool__document_management.py"
-          }
-        ]
-      }
-    ],
     "SessionEnd": [
       {
         "hooks": [
@@ -179,5 +168,15 @@
   "outputStyle": "R2-D2",
   "includeCoAuthoredBy": false,
   "cleanupPeriodDays": 30,
-  "env": {}
+  "env": {
+    "MOAI_CONVERSATION_LANG": "en",
+    "MOAI_AGENT_PROMPT_LANG": "{{AGENT_PROMPT_LANGUAGE}}",
+    "MOAI_CONVERSATION_LANG_NAME": "English",
+    "MOAI_GIT_COMMIT_MESSAGES_LANG": "{{GIT_COMMIT_MESSAGES_LANGUAGE}}",
+    "MOAI_CODE_COMMENTS_LANG": "{{CODE_COMMENTS_LANGUAGE}}",
+    "MOAI_DOCUMENTATION_LANG": "{{DOCUMENTATION_LANGUAGE}}",
+    "MOAI_ERROR_MESSAGES_LANG": "{{ERROR_MESSAGES_LANGUAGE}}",
+    "MOAI_USER_NAME": "{{USER_NAME}}",
+    "MOAI_CONFIG_SOURCE": "{{LANGUAGE_CONFIG_SOURCE}}"
+  }
 }
