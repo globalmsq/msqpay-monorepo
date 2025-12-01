@@ -1,9 +1,10 @@
 ---
 id: SPEC-DEMO-002
 type: acceptance
-version: "1.0.0"
+version: "1.0.1"
 status: "draft"
 created: "2025-12-01"
+updated: "2025-12-01"
 ---
 
 # SPEC-DEMO-002 인수 기준 (Acceptance Criteria)
@@ -13,6 +14,11 @@ created: "2025-12-01"
 이 문서는 SPEC-DEMO-002 "Demo App 서버 기반 블록체인 설정 적용"의 상세 인수 기준을 정의합니다.
 
 모든 인수 기준은 **Given-When-Then** 형식으로 작성되었으며, 각 기준은 독립적으로 검증 가능합니다.
+
+> **⚠️ 보안 필수사항 - 금액 조작 방지**
+>
+> AC-8, AC-9는 보안 관련 인수 기준으로, 반드시 통과해야 합니다.
+> 프론트엔드에서 `amount`를 직접 전송하는 코드는 보안 취약점입니다.
 
 ---
 
@@ -401,6 +407,96 @@ du -sh dist/assets/*.js
 
 ---
 
+## ✅ AC-8: 금액 조작 방지 검증 (보안)
+
+### 시나리오
+PaymentModal은 프론트엔드에서 금액을 직접 받지 않고, productId만 받아야 합니다.
+
+### Given-When-Then
+**GIVEN** PaymentModal 컴포넌트 코드를 검토할 때
+**WHEN** props 인터페이스를 확인하면
+**THEN** `amount` props가 없고 `productId` props만 존재해야 한다.
+
+### 검증 방법
+```bash
+# PaymentModal props에서 amount 검색
+git grep "amount.*:" apps/demo/src/components/PaymentModal.tsx | grep -i "props"
+
+# Expected: 검색 결과 없음 (amount props가 없어야 함)
+
+# productId props 확인
+git grep "productId.*:" apps/demo/src/components/PaymentModal.tsx | grep -i "props"
+
+# Expected: productId: string; 라인 존재
+```
+
+### 예상 결과
+- ✅ PaymentModalProps에 `amount` 없음
+- ✅ PaymentModalProps에 `productId` 존재
+- ✅ 프론트엔드에서 가격을 직접 전달하지 않음
+
+---
+
+## ✅ AC-9: 서버 측 가격 조회 검증 (보안)
+
+### 시나리오
+Next.js API Route는 클라이언트에서 받은 금액이 아닌, 서버에서 조회한 가격으로 결제서버 API를 호출해야 합니다.
+
+### Given-When-Then
+**GIVEN** Next.js API Route `/api/checkout` 코드를 검토할 때
+**WHEN** 결제서버 API 호출 로직을 확인하면
+**THEN** `amount`는 서버에서 조회한 가격을 사용하고, 클라이언트에서 받은 값을 사용하지 않아야 한다.
+
+### 검증 방법
+```typescript
+// apps/demo/src/app/api/checkout/route.ts 확인
+
+// ❌ 잘못된 구현 (클라이언트에서 받은 amount 사용)
+const { productId, amount } = await request.json();
+// amount를 직접 사용하면 안됨!
+
+// ✅ 올바른 구현 (서버에서 가격 조회)
+const { productId } = await request.json();
+const product = PRODUCTS.find(p => p.id === productId);
+const amount = product.price; // 서버에서 조회한 가격
+```
+
+### 예상 결과
+- ✅ 클라이언트에서 `amount` 파라미터를 받지 않음
+- ✅ 서버에서 `productId`로 상품 가격 조회
+- ✅ 조회된 가격으로 결제서버 API 호출
+
+### 보안 검증 스크립트
+```bash
+#!/bin/bash
+# scripts/verify-security.sh
+
+echo "🔒 보안 검증: 금액 조작 방지..."
+
+# 1. PaymentModal에서 amount props 검색
+AMOUNT_PROPS=$(git grep -E "amount\s*:" apps/demo/src/components/PaymentModal.tsx | grep -i "props" | wc -l)
+
+if [ "$AMOUNT_PROPS" != "0" ]; then
+  echo "❌ FAILED: PaymentModal에 amount props가 존재합니다!"
+  echo "   프론트엔드에서 amount를 받으면 금액 조작이 가능합니다."
+  exit 1
+fi
+
+# 2. API Route에서 클라이언트 amount 사용 검색
+CLIENT_AMOUNT=$(git grep -E "const.*amount.*=.*request" apps/demo/src/app/api/ | wc -l)
+
+if [ "$CLIENT_AMOUNT" != "0" ]; then
+  echo "❌ FAILED: API Route에서 클라이언트 amount를 사용합니다!"
+  echo "   서버에서 가격을 조회해야 합니다."
+  exit 1
+fi
+
+echo "✅ PASSED: 금액 조작 방지 보안 검증 통과!"
+exit 0
+```
+
+---
+
 ## 📊 통합 검증 체크리스트
 
 모든 인수 기준을 통합적으로 검증하는 체크리스트입니다.
@@ -419,6 +515,10 @@ du -sh dist/assets/*.js
 - [ ] AC-5: 서버 주소로 트랜잭션 생성
 - [ ] AC-6: 레거시 코드 완전 제거
 - [ ] AC-7: 테스트 커버리지 90% 달성
+
+### 🔒 보안 검증
+- [ ] AC-8: 금액 조작 방지 검증 (PaymentModal에 amount props 없음)
+- [ ] AC-9: 서버 측 가격 조회 검증 (API Route에서 서버 가격 사용)
 
 ### 🚀 통합 테스트
 - [ ] 통합 테스트 통과 (`payment-flow.test.tsx`)
@@ -440,18 +540,19 @@ du -sh dist/assets/*.js
 
 모든 다음 조건을 만족해야 SPEC-DEMO-002가 완료된 것으로 간주합니다:
 
-1. ✅ 모든 인수 기준 (AC-1 ~ AC-7) 통과
+1. ✅ 모든 인수 기준 (AC-1 ~ AC-9) 통과
 2. ✅ 테스트 커버리지 ≥90%
 3. ✅ TypeScript/ESLint 에러 0개
 4. ✅ 레거시 코드 완전 제거 검증 통과
 5. ✅ 통합 테스트 통과
 6. ✅ 프로덕션 빌드 성공
 7. ✅ 성능 요구사항 충족 (API ≤3초)
-8. ✅ 코드 리뷰 완료 (Team 모드인 경우)
-9. ✅ 문서화 완료 (`/moai:3-sync SPEC-DEMO-002`)
+8. ✅ **보안 검증 통과 (AC-8, AC-9)** ← 필수!
+9. ✅ 코드 리뷰 완료 (Team 모드인 경우)
+10. ✅ 문서화 완료 (`/moai:3-sync SPEC-DEMO-002`)
 
 ---
 
 **Status**: Draft
 **Last Updated**: 2025-12-01
-**Total Acceptance Criteria**: 7개
+**Total Acceptance Criteria**: 9개 (보안 2개 포함)

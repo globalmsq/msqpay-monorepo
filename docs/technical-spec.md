@@ -516,6 +516,35 @@ function usePayment() {
 
 ## 6. Security Considerations
 
+### 6.0 Payment Amount Manipulation (Critical)
+
+> **⚠️ 핵심 보안 원칙**
+
+| Risk | Severity | Mitigation |
+|------|----------|------------|
+| **Frontend Amount Manipulation** | **Critical** | 프론트엔드에서 `amount`를 직접 받지 않음 |
+
+**올바른 구현 패턴**:
+1. 프론트엔드 → 상점서버: `productId`만 전송 (금액 절대 불가)
+2. 상점서버: DB/설정에서 실제 상품 가격 조회
+3. 상점서버 → 결제서버: 조회된 가격으로 API 호출
+
+**잘못된 패턴** (보안 취약):
+```typescript
+// ❌ 위험: 프론트에서 amount를 받음
+const response = await fetch('/api/payments/create', {
+    body: JSON.stringify({ amount: product.price }) // 조작 가능!
+});
+```
+
+**올바른 패턴**:
+```typescript
+// ✅ 안전: productId만 전송
+const response = await fetch('/api/checkout', {
+    body: JSON.stringify({ productId: product.id }) // 서버에서 가격 조회
+});
+```
+
 ### 6.1 Contract Security
 
 | Risk | Mitigation |

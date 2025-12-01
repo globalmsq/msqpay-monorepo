@@ -54,11 +54,22 @@ C4Container
 
 ## 결제 흐름 (Payment Flow)
 
+> **⚠️ 보안 필수사항 - 금액 조작 방지**
+>
+> 아래 다이어그램의 "클라이언트"는 **상점서버**를 의미합니다 (프론트엔드 아님).
+>
+> **올바른 흐름**:
+> 1. 프론트엔드 → 상점서버: `productId`만 전송 (금액 절대 불가)
+> 2. 상점서버: DB/설정에서 실제 상품 가격 조회
+> 3. 상점서버 → 결제서버(API): 조회된 가격으로 `/payments/create` 호출
+>
+> 프론트엔드에서 `amount`를 직접 받으면 악의적 사용자가 금액을 조작할 수 있습니다!
+
 ### 1. 결제 생성 플로우 (Create Payment)
 
 ```mermaid
 sequenceDiagram
-    participant Client as 클라이언트
+    participant Client as 상점서버 (클라이언트)
     participant API as Fastify API
     participant Validation as Zod 검증
     participant Service as BlockchainService
@@ -391,6 +402,19 @@ enum ErrorCode {
 ---
 
 ## 보안 고려사항
+
+### 0. 금액 조작 방지 (핵심)
+
+> **⚠️ 가장 중요한 보안 원칙**
+
+**절대 금지**: 프론트엔드에서 `amount`를 직접 받아서 결제 생성 API를 호출하면 안됩니다.
+
+**올바른 구현**:
+1. 프론트엔드는 `productId`만 상점서버에 전송
+2. 상점서버에서 DB/설정으로부터 실제 상품 가격 조회
+3. 상점서버가 조회된 가격으로 결제 API 호출
+
+**위험**: 프론트엔드에서 `amount`를 받으면 악의적 사용자가 개발자 도구로 금액을 조작하여 1원짜리 결제를 생성할 수 있습니다.
 
 ### 1. 입력 검증
 

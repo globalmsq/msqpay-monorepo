@@ -1,7 +1,7 @@
 ---
 id: SPEC-DEMO-002
 type: plan
-version: "1.0.1"
+version: "1.0.2"
 status: "draft"
 created: "2025-12-01"
 updated: "2025-12-01"
@@ -17,10 +17,20 @@ updated: "2025-12-01"
 **Priority**: High
 **Estimated Time**: **3.5-4시간** ← 4.5-5시간에서 감소 (PaymentModal 이미 구현됨)
 
+> **⚠️ 보안 필수사항 - 금액 조작 방지**
+>
+> 프론트엔드에서 `amount`를 직접 서버로 전송하면 안됩니다!
+>
+> **올바른 구현**:
+> 1. 프론트엔드 → Next.js API Route: `productId`만 전송
+> 2. Next.js API Route: 상품 가격 조회 (constants/DB)
+> 3. Next.js API Route → 결제서버: 조회된 가격으로 API 호출
+
 **⚠️ 중요 변경사항**:
 - 경로 변경: `packages/demo-app/` → `apps/demo/`
 - zod 설치 단계 추가 (Phase 0)
 - PaymentModal 수정 범위 축소 (이미 441줄 구현됨)
+- **[보안] PaymentModal props에서 `amount` 제거, `productId` 추가**
 
 ---
 
@@ -30,6 +40,7 @@ updated: "2025-12-01"
 2. **레거시 코드 제거**: wagmi.ts의 LEGACY_CONTRACTS, getContractsForChain() 삭제
 3. **에러 처리 강화**: API 재시도, 캐싱, 로딩 상태 표시
 4. **테스트 커버리지 90%**: 모든 주요 기능에 대한 테스트 작성
+5. **[보안] 금액 조작 방지**: `productId`만 전송, 서버에서 가격 조회
 
 ---
 
@@ -284,17 +295,19 @@ import { createPayment } from '@/lib/api'; // 🆕 서버 API
 import { CreatePaymentResponse } from '@/lib/api'; // 🆕 타입
 
 // ===== State 추가 =====
+// ⚠️ 보안: amount 대신 productId 사용!
 interface PaymentModalProps {
-  amount: number;
+  productId: string;  // ✅ 보안: productId만 전송, amount 절대 불가!
   merchantId: string;
   chainId: number;
   currency: 'USDC' | 'USDT';
   onClose: () => void;
   onSuccess: () => void;
+  // ❌ amount: number; // 보안 취약점 - 금액 조작 가능!
 }
 
 export function PaymentModal({
-  amount,
+  productId,  // ✅ 보안: productId만 받음
   merchantId,
   chainId,
   currency,
@@ -302,6 +315,8 @@ export function PaymentModal({
   onSuccess,
 }: PaymentModalProps) {
   const { address, isConnected } = useAccount();
+
+  // ✅ 보안: 가격은 서버에서 조회 (Next.js API Route가 처리)
 
   // 🆕 서버 설정 상태
   const [serverConfig, setServerConfig] = useState<CreatePaymentResponse | null>(null);

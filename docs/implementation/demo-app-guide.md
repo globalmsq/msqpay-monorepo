@@ -2,6 +2,20 @@
 
 MSQPay Demo App은 결제 시스템의 실제 동작을 확인할 수 있는 웹 기반 테스트 애플리케이션입니다.
 
+> **⚠️ 보안 필수사항 - 금액 조작 방지**
+>
+> Demo App에서도 프론트엔드에서 `amount`를 직접 서버로 전송하면 안됩니다!
+>
+> **올바른 구현**:
+> 1. 프론트엔드: `productId`만 Next.js API Route로 전송
+> 2. Next.js API Route: 상품 가격 조회 후 결제서버 호출
+> 3. 결제서버: paymentId 생성 및 응답
+>
+> **Demo App 특수 사항**:
+> - 상점서버가 없으므로 Next.js API Routes가 상점서버 역할 수행
+> - 상품 가격은 서버에서 조회 (constants 또는 DB)
+> - 프론트엔드는 절대 `amount`를 직접 전송하지 않음
+
 ## 개요
 
 Demo App은 Next.js 14, wagmi, RainbowKit으로 구성되어 있으며, 다음과 같은 기능을 제공합니다:
@@ -225,19 +239,26 @@ export function TokenInfo() {
 
 PaymentModal 컴포넌트는 결제를 생성한 후 서버 API 폴링으로 상태를 확인합니다.
 
+> **⚠️ 중요**: 아래 동작 방식에서 프론트엔드는 `productId`만 전송합니다.
+> 금액은 Next.js API Route(상점서버 역할)에서 조회합니다.
+
 #### 동작 방식
 
 ```
-1. 사용자가 결제 정보 입력
-   └─ PaymentModal에서 결제 생성 요청
+1. 사용자가 상품 선택
+   └─ 프론트엔드: productId만 Next.js API로 전송 (⚠️ amount 절대 불가!)
 
-2. 서버에서 paymentId 반환
+2. Next.js API Route (상점서버 역할)
+   └─ 상품 가격 조회 (constants/DB)
+   └─ 조회된 가격으로 결제서버 API 호출
+
+3. 결제서버에서 paymentId 반환
    └─ 클라이언트는 paymentId로 2초 간격 폴링
 
-3. GET /payments/:id/status 폴링
+4. GET /payments/:id/status 폴링
    └─ 상태: pending → confirmed → completed
 
-4. 최종 상태 확인 후 모달 닫음
+5. 최종 상태 확인 후 모달 닫음
    └─ 사용자에게 결과 표시
 ```
 

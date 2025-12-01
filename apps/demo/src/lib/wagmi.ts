@@ -53,23 +53,3 @@ export function getTokenForChain(chainId: number): { address: `0x${string}`; sym
   return { address, symbol };
 }
 
-// ⚠️ NOTE: These contract values are DEPRECATED - for UI display only
-// Contract addresses are now retrieved from the POST /payments/create API response
-const LEGACY_CONTRACTS: Record<number, { gateway: `0x${string}`; forwarder: `0x${string}` }> = {
-  // Polygon Amoy - TBD after deployment
-  [polygonAmoy.id]: {
-    gateway: "0x0000000000000000000000000000000000000000",
-    forwarder: "0x0000000000000000000000000000000000000000",
-  },
-  // Localhost (Hardhat)
-  [hardhat.id]: {
-    gateway: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
-    forwarder: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-  },
-};
-
-export function getContractsForChain(chainId: number): { gateway: `0x${string}`; forwarder: `0x${string}` } | undefined {
-  // DEPRECATED: Use server-provided addresses from POST /payments/create response instead
-  // This function is kept for backward compatibility during migration
-  return LEGACY_CONTRACTS[chainId];
-}

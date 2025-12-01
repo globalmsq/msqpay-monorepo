@@ -8,38 +8,7 @@ import { PaymentHistory, PaymentHistoryRef } from "@/components/PaymentHistory";
 import { Toast } from "@/components/Toast";
 import { DEFAULT_TOKEN_SYMBOL, TOKENS } from "@/lib/wagmi";
 import { PAYMENT_HISTORY_REFRESH_DELAY } from "@/lib/constants";
-
-// Sample products for demo
-const PRODUCTS = [
-  {
-    id: "product-1",
-    name: "Digital Art Pack",
-    description: "Collection of 10 unique digital artworks",
-    price: "10",
-    image: "/images/art.png",
-  },
-  {
-    id: "product-2",
-    name: "Premium Membership",
-    description: "1 month access to premium features",
-    price: "50",
-    image: "/images/membership.png",
-  },
-  {
-    id: "product-3",
-    name: "Game Credits",
-    description: "1000 in-game credits for your account",
-    price: "25",
-    image: "/images/credits.png",
-  },
-  {
-    id: "product-4",
-    name: "NFT Mint Pass",
-    description: "Whitelist access to upcoming NFT drop",
-    price: "100",
-    image: "/images/nft.png",
-  },
-];
+import { PRODUCTS } from "@/lib/products";
 
 export default function Home() {
   const { isConnected } = useAccount();

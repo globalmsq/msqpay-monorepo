@@ -42,6 +42,16 @@ MSQPay 결제 API는 블록체인 기반 결제 시스템을 제공합니다. �
 
 새로운 결제를 생성합니다. 서버가 체인별 컨트랙트 주소를 응답에 포함하므로 클라이언트는 토큰 심볼과 chainId만 제공하면 됩니다.
 
+> **⚠️ 보안 필수사항**: 이 API는 **상점서버 → 결제서버** 호출 전용입니다.
+> 프론트엔드에서 이 API를 직접 호출하면 안됩니다!
+>
+> **올바른 플로우**:
+> 1. 프론트엔드 → 상점서버: `productId`만 전송
+> 2. 상점서버: DB/설정에서 상품 가격 조회
+> 3. 상점서버 → 결제서버: 조회된 가격으로 이 API 호출
+>
+> 프론트엔드에서 `amount`를 직접 받으면 악의적 사용자가 금액을 조작할 수 있습니다.
+
 ```http
 POST /payments/create
 Content-Type: application/json
@@ -62,7 +72,7 @@ Content-Type: application/json
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| `amount` | number | ✅ | 결제 금액 (토큰 단위, 예: 100 SUT) |
+| `amount` | number | ✅ | 결제 금액 (토큰 단위) - **상점서버가 DB에서 조회한 실제 가격** |
 | `currency` | string | ✅ | 토큰 심볼 (SUT, MSQ, TEST 등) |
 | `chainId` | number | ✅ | 블록체인 네트워크 ID (MetaMask 연결 체인) |
 | `recipientAddress` | string | ✅ | 결제 수령자(판매자) 지갑 주소 |
@@ -85,7 +95,8 @@ Content-Type: application/json
   "tokenAddress": "0xE4C687167705Abf55d709395f92e254bdF5825a2",
   "gatewayAddress": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
   "forwarderAddress": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-  "amount": "100000000000000000000",
+  "amount": "100",
+  "decimals": 18,
   "status": "pending"
 }
 ```
@@ -99,8 +110,12 @@ Content-Type: application/json
 | `tokenAddress` | string | 해당 체인의 토큰 컨트랙트 주소 |
 | `gatewayAddress` | string | 해당 체인의 Payment Gateway 주소 |
 | `forwarderAddress` | string | Gasless 거래용 Forwarder 주소 |
-| `amount` | string | wei 단위 변환된 금액 (decimals 적용) |
+| `amount` | string | 결제 금액 (human-readable, 예: "100") |
+| `decimals` | number | 토큰 소수점 자리수 (예: 18, 6) |
 | `status` | string | 결제 상태 (pending, confirmed, failed, completed) |
+
+> **참고**: 클라이언트는 블록체인 트랜잭션 생성 시 `amount`와 `decimals`를 사용하여 wei 단위로 변환해야 합니다.
+> 예: `parseUnits(amount, decimals)` → `parseUnits("100", 18)` → `100000000000000000000n`
 
 > **참고**: 클라이언트는 응답에 포함된 `tokenAddress`, `gatewayAddress`를 사용하여 블록체인 트랜잭션을 생성합니다. 더 이상 하드코딩된 컨트랙트 주소가 필요 없습니다.
 
@@ -674,6 +689,11 @@ while (retries < maxRetries) {
 2. **토큰 주소 검증**: 토큰 주소가 신뢰할 수 있는 목록에 있는지 확인하세요.
 3. **서명 검증**: Gasless 거래 시 클라이언트 서명을 항상 검증하세요.
 4. **금액 검증**: 결제 금액이 허용 범위 내인지 확인하세요.
+5. **⚠️ 금액 조작 방지 (필수)**:
+   - 프론트엔드에서 `amount`를 직접 받지 마세요.
+   - 프론트엔드는 `productId`만 전송해야 합니다.
+   - 상점서버에서 DB/설정에서 실제 상품 가격을 조회하여 결제 생성 API를 호출하세요.
+   - 악의적 사용자가 개발자 도구로 금액을 조작할 수 있습니다.
 
 ---
 

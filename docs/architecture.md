@@ -451,32 +451,39 @@ const result = await client.submitGaslessSignature(
 ### 7.1 Direct Payment
 
 ```
-1. 프론트 → 상점서버: 상품 결제 요청
-2. 상점서버: client.createPayment()
-3. 결제서버: paymentId 생성, 응답
-4. 상점서버 → 프론트: paymentId + 결제 정보
-5. 프론트 → Metamask → Contract: pay() TX
-6. 상점서버: client.getPaymentStatus() polling
-7. 결제서버 → Contract: processedPayments 조회
-8. 완료 확인 → 상품 지급
+1. 프론트 → 상점서버: 상품 ID 전송 (productId만, amount 절대 불가)
+2. 상점서버: DB/설정에서 실제 상품 가격 조회
+3. 상점서버: client.createPayment({ amount: 조회된_가격 })
+4. 결제서버: paymentId 생성, 응답
+5. 상점서버 → 프론트: paymentId + 결제 정보
+6. 프론트 → Metamask → Contract: pay() TX
+7. 상점서버: client.getPaymentStatus() polling
+8. 결제서버 → Contract: processedPayments 조회
+9. 완료 확인 → 상품 지급
 ```
+
+> **⚠️ 보안 필수사항**: 프론트엔드에서 결제 금액(amount)을 직접 전송하면 안됩니다.
+> 악의적 사용자가 금액을 조작할 수 있으므로, 반드시 상점서버에서 상품 가격을 조회해야 합니다.
 
 ### 7.2 Gasless Payment
 
 ```
-1. 프론트 → 상점서버: 상품 결제 요청
-2. 상점서버: client.createPayment()
-3. 결제서버: paymentId 생성, 응답
-4. 상점서버: client.getGaslessData(paymentId, userAddress)
-5. 결제서버: Forwarder nonce 조회, typedData 생성
-6. 상점서버 → 프론트: typedData
-7. 프론트 → Metamask: EIP-712 서명 (TX 없음, 가스비 없음)
-8. 프론트 → 상점서버: signature
-9. 상점서버: client.submitGaslessSignature()
-10. 결제서버 → OZ Defender → Contract: 가스비 대납 TX
-11. 상점서버: client.getPaymentStatus() polling
-12. 완료 확인 → 상품 지급
+1. 프론트 → 상점서버: 상품 ID 전송 (productId만, amount 절대 불가)
+2. 상점서버: DB/설정에서 실제 상품 가격 조회
+3. 상점서버: client.createPayment({ amount: 조회된_가격 })
+4. 결제서버: paymentId 생성, 응답
+5. 상점서버: client.getGaslessData(paymentId, userAddress)
+6. 결제서버: Forwarder nonce 조회, typedData 생성
+7. 상점서버 → 프론트: typedData
+8. 프론트 → Metamask: EIP-712 서명 (TX 없음, 가스비 없음)
+9. 프론트 → 상점서버: signature
+10. 상점서버: client.submitGaslessSignature()
+11. 결제서버 → OZ Defender → Contract: 가스비 대납 TX
+12. 상점서버: client.getPaymentStatus() polling
+13. 완료 확인 → 상품 지급
 ```
+
+> **⚠️ 보안 필수사항**: Direct Payment와 동일하게, 프론트엔드에서 금액을 전송하면 안됩니다.
 
 ---
 
@@ -822,8 +829,11 @@ sequenceDiagram
 |------|------|
 | 가짜 paymentId 생성 | 결제서버만 paymentId 발급 |
 | 결제 완료 위조 | Contract에서 직접 조회 |
+| **금액 조작 (Direct)** | **상점서버에서 상품 가격 조회 (프론트 amount 수신 금지)** |
 | 금액 조작 (Gasless) | 서명 데이터에서 amount 확인 |
 | 상점 위장 | API Key 인증 |
+
+> **⚠️ 핵심 보안 원칙**: 프론트엔드는 `productId`만 전송하고, 상점서버가 DB/설정에서 실제 가격을 조회하여 결제서버에 전달해야 합니다. 프론트엔드에서 `amount`를 직접 받으면 악의적 사용자가 금액을 조작할 수 있습니다.
 
 ### 13.2 컨트랙트 보안
 
