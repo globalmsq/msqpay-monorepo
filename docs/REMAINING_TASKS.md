@@ -1,6 +1,6 @@
 # MSQPay Monorepo - Remaining Tasks
 
-Last Updated: 2025-11-30
+Last Updated: 2025-12-01
 Status: Payment API & SDK Implementation Complete (SPEC-SERVER-002 ✅ SPEC-SDK-001 ✅)
 
 ## Current State
@@ -70,9 +70,9 @@ Status: Payment API & SDK Implementation Complete (SPEC-SERVER-002 ✅ SPEC-SDK-
 
 ## Remaining Tasks
 
-### ✅ Priority 1: 결제서버 개발 (MVP) - COMPLETED
+### ✅ Priority 1: 결제서버 개발 (MVP) - COMPLETED (SPEC-API-001)
 
-**SPEC-SERVER-002 완료**
+**SPEC-API-001 완료** (Based on SPEC-API-001)
 
 **구현 사항**:
 - ✅ Node.js + Fastify 기반 결제서버
@@ -107,9 +107,9 @@ packages/server/
 
 ---
 
-### ✅ Priority 2: SDK 개발 (`@globalmsq/msqpay`) - COMPLETED
+### ✅ Priority 2: SDK 개발 (`@globalmsq/msqpay`) - COMPLETED (SPEC-API-001)
 
-**SPEC-SDK-001 완료**
+**SPEC-API-001에 포함** (v2.0.0 Breaking Changes)
 
 **구현 사항**:
 - ✅ MSQPayClient 클래스 (Node 18+ native fetch)
@@ -139,9 +139,10 @@ packages/sdk/
 
 ---
 
-### Priority 3: Demo App 통합 (Next.js API Routes 방식)
+### 🔄 Priority 3: Demo App 통합 (Next.js API Routes 방식) - IN PROGRESS
 
 **Location**: `apps/demo/`
+**Progress**: 20% Complete
 
 **선택된 아키텍처**: Next.js API Routes (DB 없음)
 ```
@@ -150,36 +151,37 @@ Frontend (React) → Next.js API Routes (SDK) → 결제서버 → Smart Contrac
                   MSQPayClient (@globalmsq/msqpay)
 ```
 
+**완료된 항목**:
+- [x] SPEC-API-001 작성 및 문서화
+- [x] 마이그레이션 가이드 생성 (`docs/demo-app-migration-guide.md`)
+- [x] Breaking Changes 문서화 (`docs/breaking-changes-v2.0.md`)
+- [x] 진행 상태 추적 문서 (`docs/SPEC-API-001-PROGRESS.md`)
+
 **필요한 변경**:
 
-1. **SDK 통합**
-   - `@globalmsq/msqpay` 패키지 임포트
-   - MSQPayClient 초기화 (development 환경)
-   - API 호출 플로우 연동
+1. **wagmi.ts 정리** ⏳ (30분)
+   - [x] 문서화 완료
+   - [ ] CONTRACTS 객체 제거
+   - [ ] TOKENS 객체 제거
+   - [ ] wagmi config 유지 확인
 
-2. **API Routes 생성**
-   ```
-   apps/demo/src/app/api/payments/
-   ├── create/route.ts      # POST - 결제 생성
-   ├── [id]/status/route.ts # GET - 상태 조회
-   ├── [id]/gasless/route.ts # POST - Gasless 제출
-   └── [id]/relay/route.ts  # POST - Relay 실행
-   ```
+2. **API Routes 생성** ⏳ (1시간)
+   - [ ] create/route.ts 구현
+   - [ ] [id]/status/route.ts 구현
+   - [ ] [id]/gasless/route.ts 구현
+   - [ ] [id]/relay/route.ts 구현
 
-3. **결제 플로우 수정**
-   - 기존: 클라이언트에서 paymentId 생성
-   - 신규: SDK를 통해 서버에서 paymentId 받기
+3. **컴포넌트 업데이트** ⏳ (45분)
+   - [ ] PaymentModal 업데이트 (서버 응답 사용)
+   - [ ] 환경변수 설정 (.env.local)
+   - [ ] 에러 처리 개선
 
-4. **상태 확인 방식**
-   - 기존: 클라이언트에서 블록체인 직접 확인
-   - 신규: SDK를 통해 서버 API polling
+4. **E2E 테스트** ⏳ (1.5시간)
+   - [ ] Playwright E2E 테스트 작성
+   - [ ] 전체 결제 플로우 검증
 
-5. **샘플 코드 제공**
-   - Direct Payment (wagmi useWriteContract + SDK)
-   - Gasless Payment (wagmi useSignTypedData + SDK)
-   - Approve (1회 무한 승인)
-
-> **Note**: API 필드 변경 (`id` → `paymentId`, `currency` → `tokenSymbol`) 반영 필요
+**마이그레이션 가이드**: `docs/demo-app-migration-guide.md`
+**Breaking Changes**: `docs/breaking-changes-v2.0.md`
 
 ---
 
