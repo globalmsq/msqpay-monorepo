@@ -1,7 +1,7 @@
 # MSQPay Monorepo - Remaining Tasks
 
 Last Updated: 2025-12-01
-Status: Payment API & SDK Implementation Complete (SPEC-SERVER-002 ✅ SPEC-SDK-001 ✅)
+Status: Payment API & SDK Implementation Complete (SPEC-SERVER-002 ✅ SPEC-SDK-001 ✅ SPEC-RELAY-001 🔄)
 
 ## Current State
 
@@ -199,7 +199,44 @@ Frontend (React) → Next.js API Routes (SDK) → 결제서버 → Smart Contrac
 
 ---
 
-### Priority 5: OZ Defender Relay 설정
+### 🔄 Priority 5: Mock OZ Defender 구현 - IN PROGRESS (SPEC-RELAY-001)
+
+**Location**: `packages/mock-defender/`
+**SPEC**: `.moai/specs/SPEC-RELAY-001/`
+
+**목적**: Docker Compose 로컬 개발 환경에서 OZ Defender SDK와 동일한 인터페이스로 동작
+
+**핵심 설계**:
+- OZ Defender SDK 100% 호환 인터페이스
+- viem 기반 실제 트랜잭션 (Hardhat 노드)
+- Import 문 변경만으로 환경 전환 (환경변수 불필요)
+
+**환경별 Import**:
+```typescript
+// 로컬 개발 환경
+import { MockDefender as Defender } from 'mock-defender';
+
+// 프로덕션 환경
+import { Defender } from '@openzeppelin/defender-sdk';
+```
+
+**구현 예정 항목**:
+- [ ] packages/mock-defender 패키지 생성
+- [ ] MockDefender 클래스 구현
+- [ ] MockRelaySigner 클래스 구현
+- [ ] Docker Compose 환경 변수 설정
+- [ ] 테스트 작성 (커버리지 80% 이상)
+
+**필요한 환경 변수 (로컬)**:
+```
+RELAYER_PRIVATE_KEY=<Hardhat Account #0 키>
+RELAYER_ADDRESS=<Hardhat Account #0 주소>
+RPC_URL=http://hardhat:8545
+```
+
+---
+
+### Priority 6: OZ Defender Relay 설정 (프로덕션)
 
 **Steps**:
 1. OZ Defender 계정 생성
@@ -207,8 +244,9 @@ Frontend (React) → Next.js API Routes (SDK) → 결제서버 → Smart Contrac
 3. MATIC 충전
 4. API Key/Secret 발급
 5. 결제서버에 환경변수 설정
+6. DefenderService import 문을 `@openzeppelin/defender-sdk`로 변경
 
-**환경 변수**:
+**환경 변수 (프로덕션)**:
 ```
 OZ_DEFENDER_API_KEY=xxx
 OZ_DEFENDER_API_SECRET=xxx

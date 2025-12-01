@@ -1,7 +1,14 @@
 {
-  "last_updated": "2025-12-01T14:12:58.092460",
+  "last_updated": "2025-12-01T15:00:00.000Z",
   "current_branch": "main",
-  "uncommitted_changes": "⚠️  15 uncommitted files detected - Consider committing or stashing changes",
-  "uncommitted_files": 15,
-  "specs_in_progress": []
+  "uncommitted_changes": "⚠️  문서 수정 - commit 필요",
+  "uncommitted_files": 5,
+  "specs_in_progress": ["SPEC-RELAY-001"],
+  "spec_details": {
+    "SPEC-RELAY-001": {
+      "title": "Mock OZ Defender 패키지 구현",
+      "status": "planning",
+      "location": "packages/mock-defender"
+    }
+  }
 }

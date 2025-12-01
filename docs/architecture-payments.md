@@ -348,9 +348,25 @@ graph LR
 | **언어** | TypeScript | v5.3+ | 타입 안전성 |
 | **블록체인** | viem | v2.21+ | EVM 상호작용 (type-safe) |
 | **검증** | Zod | v3.22+ | 요청/응답 스키마 검증 |
-| **Gasless** | OZ Defender | Latest | 릴레이 서비스 |
+| **Gasless (프로덕션)** | OZ Defender | Latest | 릴레이 서비스 |
+| **Gasless (로컬)** | MockDefender | 0.1.0 | OZ Defender 호환 Mock (SPEC-RELAY-001) |
 | **테스트** | Vitest | v1.0+ | 고속 단위 테스트 |
 | **네트워크** | Polygon | - | EVM 호환 블록체인 |
+
+### 로컬 개발 환경 (MockDefender)
+
+Docker Compose 로컬 환경에서는 MockDefender를 사용하여 OZ Defender SDK와 동일한 인터페이스로 Hardhat 노드에 실제 트랜잭션을 제출합니다.
+
+**환경별 Import 전환**:
+```typescript
+// 로컬 개발 (Docker Compose)
+import { MockDefender as Defender } from 'mock-defender';
+
+// 프로덕션/스테이징
+import { Defender } from '@openzeppelin/defender-sdk';
+```
+
+**상세 사양**: `.moai/specs/SPEC-RELAY-001/` 참조
 
 ---
 
