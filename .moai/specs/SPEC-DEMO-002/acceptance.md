@@ -1,0 +1,457 @@
+---
+id: SPEC-DEMO-002
+type: acceptance
+version: "1.0.0"
+status: "draft"
+created: "2025-12-01"
+---
+
+# SPEC-DEMO-002 인수 기준 (Acceptance Criteria)
+
+## 📋 Overview
+
+이 문서는 SPEC-DEMO-002 "Demo App 서버 기반 블록체인 설정 적용"의 상세 인수 기준을 정의합니다.
+
+모든 인수 기준은 **Given-When-Then** 형식으로 작성되었으며, 각 기준은 독립적으로 검증 가능합니다.
+
+---
+
+## ✅ AC-1: API 클라이언트 함수 추가
+
+### 시나리오
+서버 API를 호출하여 블록체인 설정을 가져오는 클라이언트 함수가 정상적으로 동작해야 합니다.
+
+### Given-When-Then
+**GIVEN** api.ts 파일에 createPayment() 함수가 구현되어 있고
+**WHEN** 유효한 CreatePaymentRequest로 호출하면
+**THEN** 서버로부터 CreatePaymentResponse를 성공적으로 받는다.
+
+### 검증 방법
+```typescript
+// Test: packages/demo-app/src/utils/api.test.ts
+const request: CreatePaymentRequest = {
+  merchantId: 'merchant-123',
+  amount: 100,
+  currency: 'USDC',
+  chainId: 80002,
+  description: 'Test payment',
+};
+
+const response = await createPayment(request);
+
+expect(response.success).toBe(true);
+expect(response.data?.paymentId).toBeDefined();
+expect(response.data?.tokenAddress).toMatch(/^0x[a-fA-F0-9]{40}$/);
+expect(response.data?.gatewayAddress).toMatch(/^0x[a-fA-F0-9]{40}$/);
+```
+
+### 예상 결과
+- ✅ HTTP 200 응답
+- ✅ response.success === true
+- ✅ response.data 에 paymentId, tokenAddress, gatewayAddress 포함
+- ✅ 모든 주소 형식이 유효한 Ethereum 주소 (0x...)
+
+---
+
+## ✅ AC-2: Zod 스키마 검증
+
+### 시나리오
+잘못된 요청 데이터는 Zod 스키마 검증에 의해 거부되어야 합니다.
+
+### Given-When-Then
+**GIVEN** 잘못된 chainId (-1)로 createPayment() 호출 시
+**WHEN** Zod 스키마 검증이 실행되면
+**THEN** VALIDATION_ERROR 코드와 함께 실패한다.
+
+### 검증 방법
+```typescript
+// Test: packages/demo-app/src/utils/api.test.ts
+const invalidRequest = {
+  merchantId: 'merchant-123',
+  amount: 100,
+  currency: 'USDC',
+  chainId: -1, // ❌ 잘못된 chainId
+};
+
+const response = await createPayment(invalidRequest);
+
+expect(response.success).toBe(false);
+expect(response.error?.code).toBe(ApiErrorCode.VALIDATION_ERROR);
+expect(response.error?.details).toBeDefined();
+```
+
+### 예상 결과
+- ✅ response.success === false
+- ✅ response.error.code === "VALIDATION_ERROR"
+- ✅ response.error.details 에 Zod 에러 정보 포함
+
+### 추가 검증 케이스
+```typescript
+// 음수 amount
+const invalidAmount = { ...validRequest, amount: -50 };
+await createPayment(invalidAmount); // VALIDATION_ERROR
+
+// 빈 merchantId
+const invalidMerchant = { ...validRequest, merchantId: '' };
+await createPayment(invalidMerchant); // VALIDATION_ERROR
+
+// 잘못된 currency
+const invalidCurrency = { ...validRequest, currency: 'ETH' };
+await createPayment(invalidCurrency); // VALIDATION_ERROR
+```
+
+---
+
+## ✅ AC-3: API 재시도 로직
+
+### 시나리오
+일시적인 서버 에러(5xx)는 자동으로 재시도되어야 합니다.
+
+### Given-When-Then
+**GIVEN** 서버가 500 에러를 2회 반환한 후 성공하는 경우
+**WHEN** createPayment() 호출 시
+**THEN** 최대 3회 재시도하여 최종적으로 성공한다.
+
+### 검증 방법
+```typescript
+// Test: packages/demo-app/src/utils/api.test.ts
+const mockResponse = {
+  success: true,
+  data: { paymentId: 'payment-123', /* ... */ },
+};
+
+// Mock fetch: 첫 2회는 500 에러, 3회째 성공
+(global.fetch as any)
+  .mockRejectedValueOnce(
+    Object.assign(new Error('Internal Server Error'), { status: 500 })
+  )
+  .mockRejectedValueOnce(
+    Object.assign(new Error('Internal Server Error'), { status: 500 })
+  )
+  .mockResolvedValueOnce({
+    ok: true,
+    json: async () => mockResponse,
+  });
+
+const result = await createPayment(validRequest);
+
+expect(result.success).toBe(true);
+expect(global.fetch).toHaveBeenCalledTimes(3); // 2회 실패 + 1회 성공
+```
+
+### 예상 결과
+- ✅ 최대 3회까지 재시도
+- ✅ 5xx 에러만 재시도 (4xx는 재시도하지 않음)
+- ✅ 최종적으로 성공 응답 반환
+
+### 추가 검증 케이스
+```typescript
+// 4xx 에러는 재시도하지 않음
+mockRejectedValue({ status: 400 });
+const result = await createPayment(validRequest);
+expect(global.fetch).toHaveBeenCalledTimes(1); // 재시도 없음
+
+// 3회 모두 실패하면 에러 반환
+mockRejectedValue({ status: 500 }); // 3회
+const result = await createPayment(validRequest);
+expect(result.success).toBe(false);
+expect(global.fetch).toHaveBeenCalledTimes(3);
+```
+
+---
+
+## ✅ AC-4: PaymentModal 서버 설정 로드
+
+### 시나리오
+PaymentModal이 마운트될 때 자동으로 서버 API를 호출하여 블록체인 설정을 로드해야 합니다.
+
+### Given-When-Then
+**GIVEN** PaymentModal이 마운트되고
+**WHEN** 지갑이 연결되어 있으면
+**THEN** 자동으로 서버 API를 호출하여 블록체인 설정을 로드한다.
+
+### 검증 방법
+```typescript
+// Test: packages/demo-app/src/components/PaymentModal.test.tsx
+const createPaymentSpy = vi.spyOn(api, 'createPayment').mockResolvedValueOnce({
+  success: true,
+  data: {
+    paymentId: 'payment-123',
+    tokenAddress: '0x1234567890abcdef',
+    gatewayAddress: '0xabcdef1234567890',
+    amount: '100',
+    currency: 'USDC',
+    chainId: 80002,
+    expiresAt: '2025-12-01T12:00:00Z',
+  },
+});
+
+// Mock wagmi: 지갑 연결 상태
+vi.mock('wagmi', () => ({
+  useAccount: () => ({ address: '0x123', isConnected: true }),
+  // ...
+}));
+
+render(<PaymentModal amount={100} merchantId="merchant-123" chainId={80002} currency="USDC" onClose={vi.fn()} onSuccess={vi.fn()} />);
+
+await waitFor(() => {
+  expect(createPaymentSpy).toHaveBeenCalledWith({
+    merchantId: 'merchant-123',
+    amount: 100,
+    currency: 'USDC',
+    chainId: 80002,
+    description: expect.stringContaining('merchant-123'),
+  });
+});
+```
+
+### 예상 결과
+- ✅ 컴포넌트 마운트 시 createPayment() 자동 호출
+- ✅ 올바른 파라미터로 API 호출
+- ✅ 지갑 미연결 시 API 호출하지 않음
+
+### 추가 검증 케이스
+```typescript
+// 지갑 미연결 시 API 호출 없음
+vi.mock('wagmi', () => ({
+  useAccount: () => ({ address: null, isConnected: false }),
+}));
+
+render(<PaymentModal {...props} />);
+expect(createPaymentSpy).not.toHaveBeenCalled();
+```
+
+---
+
+## ✅ AC-5: 서버 주소로 트랜잭션 생성
+
+### 시나리오
+사용자가 Approve 버튼을 클릭하면, 서버에서 받은 주소를 사용하여 트랜잭션을 생성해야 합니다.
+
+### Given-When-Then
+**GIVEN** 서버 설정이 로드된 상태에서
+**WHEN** Approve 버튼을 클릭하면
+**THEN** serverConfig.tokenAddress와 serverConfig.gatewayAddress를 사용하여 트랜잭션을 생성한다.
+
+### 검증 방법
+```typescript
+// Test: packages/demo-app/src/components/PaymentModal.test.tsx
+const writeContractSpy = vi.fn();
+
+vi.mock('wagmi', () => ({
+  useAccount: () => ({ address: '0x123', isConnected: true }),
+  useWriteContract: () => ({ writeContract: writeContractSpy, data: null }),
+  // ...
+}));
+
+// 서버 설정 로드 완료 대기
+await waitFor(() => screen.getByText(/Approve USDC/i));
+
+// Approve 버튼 클릭
+const approveButton = screen.getByText(/Approve USDC/i);
+await userEvent.click(approveButton);
+
+// writeContract 호출 검증
+expect(writeContractSpy).toHaveBeenCalledWith({
+  address: '0x1234567890abcdef', // serverConfig.tokenAddress
+  abi: expect.any(Array),
+  functionName: 'approve',
+  args: ['0xabcdef1234567890', expect.any(BigInt)], // gatewayAddress, amount
+});
+```
+
+### 예상 결과
+- ✅ serverConfig.tokenAddress로 approve 호출
+- ✅ serverConfig.gatewayAddress를 spender로 사용
+- ✅ 하드코딩된 주소 사용하지 않음
+
+### 추가 검증 케이스
+```typescript
+// Pay Now 버튼 클릭 시
+await userEvent.click(screen.getByText(/Pay Now/i));
+
+expect(writeContractSpy).toHaveBeenCalledWith({
+  address: '0xabcdef1234567890', // serverConfig.gatewayAddress
+  abi: expect.any(Array),
+  functionName: 'processPayment',
+  args: [
+    'payment-123', // paymentId
+    '0x1234567890abcdef', // tokenAddress
+    expect.any(BigInt), // amount
+  ],
+});
+```
+
+---
+
+## ✅ AC-6: 레거시 코드 완전 제거
+
+### 시나리오
+wagmi.ts에서 LEGACY_CONTRACTS와 getContractsForChain() 함수가 완전히 삭제되어야 합니다.
+
+### Given-When-Then
+**GIVEN** wagmi.ts 파일을 검토할 때
+**WHEN** LEGACY_CONTRACTS를 검색하면
+**THEN** 검색 결과가 0개여야 한다.
+
+### 검증 방법
+```bash
+# 스크립트: packages/demo-app/scripts/verify-cleanup.sh
+
+# LEGACY_CONTRACTS 검색
+LEGACY_COUNT=$(git grep -c "LEGACY_CONTRACTS" packages/demo-app/src || echo "0")
+
+if [ "$LEGACY_COUNT" != "0" ]; then
+  echo "❌ FAILED: LEGACY_CONTRACTS still exists!"
+  exit 1
+fi
+
+# getContractsForChain 검색
+GET_CONTRACTS_COUNT=$(git grep -c "getContractsForChain" packages/demo-app/src || echo "0")
+
+if [ "$GET_CONTRACTS_COUNT" != "0" ]; then
+  echo "❌ FAILED: getContractsForChain still exists!"
+  exit 1
+fi
+
+# getTokenForChain은 유지되어야 함 (UI 표시용)
+GET_TOKEN_COUNT=$(git grep -c "getTokenForChain" packages/demo-app/src || echo "0")
+
+if [ "$GET_TOKEN_COUNT" == "0" ]; then
+  echo "❌ FAILED: getTokenForChain was removed (should be kept)!"
+  exit 1
+fi
+
+echo "✅ PASSED: All legacy code removed successfully!"
+```
+
+### 예상 결과
+- ✅ LEGACY_CONTRACTS 검색 결과 0개
+- ✅ getContractsForChain 검색 결과 0개
+- ✅ getTokenForChain은 유지됨 (UI 표시용)
+
+### 수동 검증
+```typescript
+// packages/demo-app/src/config/wagmi.ts 파일 확인
+
+// ❌ 존재하지 않아야 함
+// export const LEGACY_CONTRACTS = { ... };
+// export function getContractsForChain(chainId: number) { ... }
+
+// ✅ 존재해야 함
+export function getTokenForChain(chainId: number) {
+  // UI 표시용 토큰 정보
+}
+```
+
+---
+
+## ✅ AC-7: 테스트 커버리지 90% 달성
+
+### 시나리오
+모든 주요 파일에 대해 90% 이상의 테스트 커버리지를 달성해야 합니다.
+
+### Given-When-Then
+**GIVEN** 전체 테스트를 실행하고
+**WHEN** 커버리지 리포트를 확인하면
+**THEN** api.ts 95%+, PaymentModal.tsx 90%+, wagmi.ts 85%+ 커버리지를 달성한다.
+
+### 검증 방법
+```bash
+# 전체 테스트 + 커버리지 실행
+npm test -- --coverage
+
+# 커버리지 리포트 확인
+# api.ts: 95%+ (Statements, Branches, Functions, Lines 모두)
+# PaymentModal.tsx: 90%+
+# wagmi.ts: 85%+
+```
+
+### 예상 결과
+```
+File                    | Stmts | Branch | Funcs | Lines | Uncovered Lines
+------------------------|-------|--------|-------|-------|------------------
+api.ts                  | 96.5  | 95.0   | 100   | 96.8  | 45-47
+PaymentModal.tsx        | 92.3  | 90.5   | 94.1  | 92.0  | 125, 180-182
+wagmi.ts                | 87.5  | 85.0   | 88.9  | 87.2  | 67
+------------------------|-------|--------|-------|-------|------------------
+All files               | 91.8  | 90.2   | 93.5  | 91.5  |
+```
+
+### 커버리지 누락 허용 범위
+- **api.ts**: 에러 핸들링 일부 케이스 (예: 네트워크 타임아웃)
+- **PaymentModal.tsx**: 엣지 케이스 UI 상태 (예: 트랜잭션 대기 중 컴포넌트 언마운트)
+- **wagmi.ts**: Chain ID 검증 로직 일부
+
+### 추가 검증
+```bash
+# TypeScript 컴파일 에러 0개 (NFR-3)
+npm run type-check
+# Expected: ✅ No errors found
+
+# ESLint 에러 0개
+npm run lint
+# Expected: ✅ No errors found
+
+# 번들 크기 증가 <5KB (NFR-4)
+npm run build
+du -sh dist/assets/*.js
+# Expected: 기존 대비 +3~4KB
+```
+
+---
+
+## 📊 통합 검증 체크리스트
+
+모든 인수 기준을 통합적으로 검증하는 체크리스트입니다.
+
+### 🔧 개발 환경 검증
+- [ ] TypeScript 컴파일 에러 0개 (`npm run type-check`)
+- [ ] ESLint 에러 0개 (`npm run lint`)
+- [ ] 전체 테스트 통과 (`npm test`)
+- [ ] 커버리지 ≥90% (`npm test -- --coverage`)
+
+### 🧪 기능 검증
+- [ ] AC-1: API 클라이언트 함수 정상 동작
+- [ ] AC-2: Zod 스키마 검증 정상 동작
+- [ ] AC-3: API 재시도 로직 정상 동작
+- [ ] AC-4: PaymentModal 서버 설정 자동 로드
+- [ ] AC-5: 서버 주소로 트랜잭션 생성
+- [ ] AC-6: 레거시 코드 완전 제거
+- [ ] AC-7: 테스트 커버리지 90% 달성
+
+### 🚀 통합 테스트
+- [ ] 통합 테스트 통과 (`payment-flow.test.tsx`)
+- [ ] E2E 테스트 통과 (선택사항, `npx playwright test`)
+
+### 📦 빌드 검증
+- [ ] 프로덕션 빌드 성공 (`npm run build`)
+- [ ] 번들 크기 증가 <5KB
+- [ ] 빌드 결과물에 에러 없음
+
+### 🎯 성능 검증
+- [ ] API 응답 시간 ≤3초 (NFR-1)
+- [ ] 로딩 상태 표시 정상 동작 (FR-5)
+- [ ] 에러 처리 및 재시도 버튼 정상 동작 (IR-3)
+
+---
+
+## 🎯 Definition of Done
+
+모든 다음 조건을 만족해야 SPEC-DEMO-002가 완료된 것으로 간주합니다:
+
+1. ✅ 모든 인수 기준 (AC-1 ~ AC-7) 통과
+2. ✅ 테스트 커버리지 ≥90%
+3. ✅ TypeScript/ESLint 에러 0개
+4. ✅ 레거시 코드 완전 제거 검증 통과
+5. ✅ 통합 테스트 통과
+6. ✅ 프로덕션 빌드 성공
+7. ✅ 성능 요구사항 충족 (API ≤3초)
+8. ✅ 코드 리뷰 완료 (Team 모드인 경우)
+9. ✅ 문서화 완료 (`/moai:3-sync SPEC-DEMO-002`)
+
+---
+
+**Status**: Draft
+**Last Updated**: 2025-12-01
+**Total Acceptance Criteria**: 7개

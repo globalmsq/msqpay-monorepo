@@ -1,0 +1,10 @@
+{
+  "tech_debt": [],
+  "performance_bottlenecks": [],
+  "recent_patterns": {
+    "frequent_file_edits": [],
+    "test_failures": [],
+    "git_operations": "daily commits, feature branches"
+  },
+  "next_priorities": []
+}

@@ -185,10 +185,15 @@ env/
 !.moai/config/
 .coverage
 
-# Claude Code
-.claude/
-CLAUDE.md
-.mcp.json
+# Claude Code - 필수 파일만 포함
+.claude/*
+!.claude/commands/
+!.claude/settings.json
+# CLAUDE.md - Git에 포함
+# .mcp.json - Git에 포함
 
-# Moai
-.moai/
+# Moai - 필수 폴더만 포함
+.moai/*
+!.moai/config/
+!.moai/specs/
+!.moai/memory/
