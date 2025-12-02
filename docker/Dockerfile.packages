@@ -131,43 +131,43 @@ EXPOSE 3000
 CMD ["pnpm", "start"]
 
 # ============================================
-# Mock Defender Dependencies Stage
+# Simple Defender Dependencies Stage
 # ============================================
-FROM base AS mock-defender-deps
+FROM base AS simple-defender-deps
 
-# Copy mock-defender package.json
-COPY packages/mock-defender/package.json ./packages/mock-defender/
+# Copy simple-defender package.json
+COPY packages/simple-defender/package.json ./packages/simple-defender/
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile --filter @msqpay/mock-defender
+RUN pnpm install --frozen-lockfile --filter @msqpay/simple-defender
 
 # ============================================
-# Mock Defender Builder Stage
+# Simple Defender Builder Stage
 # ============================================
-FROM mock-defender-deps AS mock-defender-builder
+FROM simple-defender-deps AS simple-defender-builder
 
-# Copy mock-defender source
-COPY packages/mock-defender ./packages/mock-defender
+# Copy simple-defender source
+COPY packages/simple-defender ./packages/simple-defender
 
-WORKDIR /app/packages/mock-defender
+WORKDIR /app/packages/simple-defender
 
-# Build mock-defender
+# Build simple-defender
 RUN pnpm build
 
 # ============================================
-# Mock Defender Runtime Stage
+# Simple Defender Runtime Stage
 # ============================================
-FROM base AS mock-defender
+FROM base AS simple-defender
 
-# Copy dependencies from mock-defender-deps stage
-COPY --from=mock-defender-deps /app/node_modules ./node_modules
-COPY --from=mock-defender-deps /app/packages/mock-defender/node_modules ./packages/mock-defender/node_modules
+# Copy dependencies from simple-defender-deps stage
+COPY --from=simple-defender-deps /app/node_modules ./node_modules
+COPY --from=simple-defender-deps /app/packages/simple-defender/node_modules ./packages/simple-defender/node_modules
 
-# Copy built mock-defender
-COPY --from=mock-defender-builder /app/packages/mock-defender/dist ./packages/mock-defender/dist
-COPY --from=mock-defender-builder /app/packages/mock-defender/package.json ./packages/mock-defender/
+# Copy built simple-defender
+COPY --from=simple-defender-builder /app/packages/simple-defender/dist ./packages/simple-defender/dist
+COPY --from=simple-defender-builder /app/packages/simple-defender/package.json ./packages/simple-defender/
 
-WORKDIR /app/packages/mock-defender
+WORKDIR /app/packages/simple-defender
 
 # Environment variables
 ENV NODE_ENV=production

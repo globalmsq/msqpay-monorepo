@@ -417,8 +417,8 @@ expect(response.json().message).toContain('Payment already processed');
 - PaymentProcessor 컨트랙트의 executePayment 함수가 호출되어야 함
 
 ```typescript
-// Mock OZ Defender API 호출 확인
-expect(mockDefenderRelaySigner.sendTransaction).toHaveBeenCalledWith({
+// SimpleDefender API 호출 확인
+expect(simpleDefenderRelaySigner.sendTransaction).toHaveBeenCalledWith({
   to: PAYMENT_PROCESSOR_ADDRESS,
   data: expect.stringContaining('executePayment')
 });

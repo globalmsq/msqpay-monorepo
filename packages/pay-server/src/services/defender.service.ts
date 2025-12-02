@@ -16,7 +16,7 @@ interface RelayerRequest {
 }
 
 /**
- * ForwardRequest를 mock-defender에 전송하기 위한 요청 형식
+ * ForwardRequest를 simple-defender에 전송하기 위한 요청 형식
  */
 interface ForwardRelayRequest {
   forwardRequest: {
@@ -57,7 +57,7 @@ interface RelayerInfo {
  *
  * HTTP 클라이언트를 통해 Defender API와 통신합니다.
  * - Production: OZ Defender API (api.defender.openzeppelin.com)
- * - Local: MockDefender HTTP 서비스 (mock-defender:3001)
+ * - Local: SimpleDefender HTTP 서비스 (simple-defender:3001)
  *
  * 환경변수 DEFENDER_API_URL만 변경하면 동일한 코드로 양쪽 환경에서 동작합니다.
  */
@@ -206,8 +206,8 @@ export class DefenderService {
   /**
    * ERC2771 ForwardRequest를 사용한 Gasless 거래 제출
    *
-   * ForwardRequest 파라미터와 서명을 mock-defender의 /relay/forward 엔드포인트로 전송합니다.
-   * mock-defender는 Forwarder.execute(ForwardRequestData)를 호출합니다.
+   * ForwardRequest 파라미터와 서명을 simple-defender의 /relay/forward 엔드포인트로 전송합니다.
+   * simple-defender는 Forwarder.execute(ForwardRequestData)를 호출합니다.
    */
   async submitForwardTransaction(
     paymentId: string,

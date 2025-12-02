@@ -166,10 +166,10 @@ const types = {
 
 | 환경 | Relay 서비스 | API URL |
 |------|-------------|----------|
-| Local (Docker Compose) | MockDefender HTTP 서비스 | `http://mock-defender:3001` |
+| Local (Docker Compose) | SimpleDefender HTTP 서비스 | `http://simple-defender:3001` |
 | Testnet/Mainnet | OZ Defender API | `https://api.defender.openzeppelin.com` |
 
-**MockDefender HTTP 서비스**: OZ Defender API와 100% 호환되는 HTTP 엔드포인트를 제공하는 독립 Docker 컨테이너입니다. Local 개발 환경에서 사용됩니다.
+**SimpleDefender HTTP 서비스**: OZ Defender API와 100% 호환되는 HTTP 엔드포인트를 제공하는 독립 Docker 컨테이너입니다. Local 개발 환경에서 사용됩니다.
 
 **OZ Defender API**: Testnet 및 Mainnet 환경에서 프로덕션 안정성을 위해 OpenZeppelin Defender 서비스를 사용합니다.
 

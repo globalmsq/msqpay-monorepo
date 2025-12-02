@@ -402,11 +402,11 @@ Production과 Local 환경이 동일한 아키텍처를 유지합니다:
 
 | 환경 | Relay 서비스 | API URL | Forwarder |
 |------|-------------|---------|-----------|
-| **Local (Docker Compose)** | MockDefender HTTP 서비스 | http://mock-defender:3001 | ERC2771Forwarder |
+| **Local (Docker Compose)** | SimpleDefender HTTP 서비스 | http://simple-defender:3001 | ERC2771Forwarder |
 | **Testnet/Mainnet** | OZ Defender API | https://api.defender.openzeppelin.com | ERC2771Forwarder |
 
 **환경 전환 방식**:
-- `DEFENDER_API_URL=http://mock-defender:3001` → Local 개발 환경
+- `DEFENDER_API_URL=http://simple-defender:3001` → Local 개발 환경
 - `DEFENDER_API_URL=https://api.defender.openzeppelin.com` → Production 환경
 
 **핵심 특징**:
@@ -434,7 +434,7 @@ Gateway:   <배포된 주소>
 User (EIP-712 서명) → Payment Server (DefenderService HTTP Client) → Relay API → Forwarder.execute() → PaymentGateway
 ```
 
-- Local: Relay API = MockDefender HTTP 서비스 (Docker 컨테이너)
+- Local: Relay API = SimpleDefender HTTP 서비스 (Docker 컨테이너)
 - Production: Relay API = OZ Defender API
 
 **상세 사양**: `.moai/specs/SPEC-RELAY-001/` 참조 (v4.0.0)

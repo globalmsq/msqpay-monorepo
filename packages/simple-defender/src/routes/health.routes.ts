@@ -50,7 +50,7 @@ export async function healthRoutes(
 
       return {
         status: 'healthy',
-        service: 'mock-defender',
+        service: 'simple-defender',
         version: '1.0.0',
         timestamp: new Date().toISOString(),
         relayer: relayerInfo,

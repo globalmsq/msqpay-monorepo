@@ -13,13 +13,13 @@
 
 OZ Defender API 호환 Gasless 트랜잭션 시스템 구현의 완료 조건과 품질 검증 기준을 정의합니다. 모든 인수 기준은 Given-When-Then 형식으로 작성됩니다.
 
-## MockDefender HTTP 서비스 인수 기준
+## SimpleDefender HTTP 서비스 인수 기준
 
-### AC-001: MockDefender 서버 시작
+### AC-001: SimpleDefender 서버 시작
 
-Given: MockDefender 패키지가 빌드되어 있고
+Given: SimpleDefender 패키지가 빌드되어 있고
 And: 필수 환경변수 (RELAYER_PRIVATE_KEY, RPC_URL, CHAIN_ID, FORWARDER_ADDRESS)가 설정되어 있을 때
-When: MockDefender 서버를 시작하면
+When: SimpleDefender 서버를 시작하면
 Then: 포트 3001에서 HTTP 서버가 시작되어야 합니다
 And: /health 엔드포인트가 { status: "ok" }를 반환해야 합니다
 
@@ -29,14 +29,14 @@ And: /health 엔드포인트가 { status: "ok" }를 반환해야 합니다
 
 ### AC-002: POST /relay 트랜잭션 제출
 
-Given: MockDefender 서버가 실행 중이고
+Given: SimpleDefender 서버가 실행 중이고
 And: 유효한 트랜잭션 데이터 (to, data, gasLimit)가 준비되어 있을 때
 When: POST /relay 엔드포인트에 요청을 보내면
 Then: transactionId, hash, status를 포함한 응답을 반환해야 합니다
 And: 트랜잭션이 블록체인에 제출되어야 합니다
 
 검증 결과: ✅ 통과
-- 단위 테스트: packages/mock-defender/tests/relay.service.test.ts
+- 단위 테스트: packages/simple-defender/tests/relay.service.test.ts
 - 트랜잭션 제출 및 응답 형식 확인
 
 ### AC-003: GET /relay/:id 상태 조회
@@ -101,7 +101,7 @@ And: 현재 트랜잭션 상태를 반환해야 합니다
 
 ### AC-008: 상태 매핑
 
-Given: MockDefender 또는 OZ Defender API가 상태를 반환할 때
+Given: SimpleDefender 또는 OZ Defender API가 상태를 반환할 때
 When: DefenderService가 상태를 매핑하면
 Then: 다음과 같이 매핑되어야 합니다:
 - pending, sent, submitted, inmempool → pending
@@ -127,11 +127,11 @@ Then: 적절한 에러 메시지가 반환되어야 합니다:
 
 ## Docker Compose 통합 인수 기준
 
-### AC-010: mock-defender 서비스 설정
+### AC-010: simple-defender 서비스 설정
 
 Given: docker-compose.yml이 업데이트되어 있을 때
 When: docker-compose config 명령을 실행하면
-Then: mock-defender 서비스가 다음 설정을 가져야 합니다:
+Then: simple-defender 서비스가 다음 설정을 가져야 합니다:
 - 포트: 3002:3001
 - 환경변수: RELAYER_PRIVATE_KEY, RPC_URL, CHAIN_ID, FORWARDER_ADDRESS
 - 의존성: hardhat
@@ -144,9 +144,9 @@ Then: mock-defender 서비스가 다음 설정을 가져야 합니다:
 Given: docker-compose.yml이 업데이트되어 있을 때
 When: docker-compose config 명령을 실행하면
 Then: server 서비스가 다음 설정을 가져야 합니다:
-- DEFENDER_API_URL=http://mock-defender:3001
+- DEFENDER_API_URL=http://simple-defender:3001
 - RELAYER_ADDRESS=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-- 의존성: mock-defender
+- 의존성: simple-defender
 
 검증 결과: ✅ 통과
 - docker/docker-compose.yml 설정 확인
@@ -175,10 +175,10 @@ And: RelayFactory 참조가 없어야 합니다
 - packages/pay-server/src/services/relay.factory.ts 삭제 확인
 - 관련 테스트 파일 삭제 확인
 
-### AC-014: MockDefender 라이브러리 파일 제거
+### AC-014: SimpleDefender 라이브러리 파일 제거
 
 Given: 코드베이스를 검사할 때
-When: mock-defender/src 디렉토리를 확인하면
+When: simple-defender/src 디렉토리를 확인하면
 Then: 다음 파일들이 존재하지 않아야 합니다:
 - mock-defender.ts
 - relay-signer.ts
@@ -199,9 +199,9 @@ Then: @openzeppelin/defender-sdk가 없어야 합니다
 
 ## 테스트 인수 기준
 
-### AC-016: MockDefender 단위 테스트
+### AC-016: SimpleDefender 단위 테스트
 
-Given: packages/mock-defender/tests 디렉토리가 있을 때
+Given: packages/simple-defender/tests 디렉토리가 있을 때
 When: pnpm test를 실행하면
 Then: 모든 테스트가 통과해야 합니다
 
@@ -223,7 +223,7 @@ Given: 모든 패키지가 빌드되어 있을 때
 When: 전체 테스트를 실행하면
 Then: 모든 테스트가 통과해야 합니다:
 - packages/pay-server: 169개 테스트
-- packages/mock-defender: 10개 테스트
+- packages/simple-defender: 10개 테스트
 
 검증 결과: ✅ 통과
 - 전체 179개 테스트 통과
@@ -252,7 +252,7 @@ And: API 캐싱으로 인한 stale nonce 문제가 발생하지 않아야 합니
 
 테스트:
 - ✅ 단위 테스트 100% 통과
-- ✅ MockDefender HTTP 서비스 테스트 통과
+- ✅ SimpleDefender HTTP 서비스 테스트 통과
 - ✅ DefenderService HTTP 클라이언트 테스트 통과
 
 기능:
@@ -270,7 +270,7 @@ And: API 캐싱으로 인한 stale nonce 문제가 발생하지 않아야 합니
 SPEC-RELAY-001 v4.1.0 완료 조건:
 
 구현 완료:
-- ✅ MockDefender HTTP 서비스 구현
+- ✅ SimpleDefender HTTP 서비스 구현
 - ✅ DefenderService HTTP 클라이언트 구현
 - ✅ Docker Compose 설정 업데이트
 - ✅ DEFENDER_API_URL 기반 환경 전환
@@ -282,7 +282,7 @@ SPEC-RELAY-001 v4.1.0 완료 조건:
 - ✅ 레거시 파일 삭제
 
 테스트 완료:
-- ✅ MockDefender 단위 테스트 작성 및 통과 (10개)
+- ✅ SimpleDefender 단위 테스트 작성 및 통과 (10개)
 - ✅ DefenderService 단위 테스트 업데이트 및 통과
 - ✅ 전체 테스트 통과 (179개)
 

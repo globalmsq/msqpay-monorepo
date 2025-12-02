@@ -1,7 +1,7 @@
 {
-  "name": "@msqpay/mock-defender",
+  "name": "@msqpay/simple-defender",
   "version": "1.0.0",
-  "description": "Mock OpenZeppelin Defender HTTP service for local gasless transaction relay",
+  "description": "Simple OpenZeppelin Defender HTTP service for local gasless transaction relay",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {

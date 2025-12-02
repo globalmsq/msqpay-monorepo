@@ -30,7 +30,7 @@ const blockchainService = new BlockchainService(rpcUrl, gatewayAddress);
 
 // Initialize Defender service for gasless transactions
 // Production: https://api.defender.openzeppelin.com
-// Local: http://mock-defender:3001
+// Local: http://simple-defender:3001
 const defenderApiUrl = process.env.DEFENDER_API_URL || 'http://localhost:3001';
 const defenderApiKey = process.env.DEFENDER_API_KEY || '';
 const defenderApiSecret = process.env.DEFENDER_API_SECRET || '';

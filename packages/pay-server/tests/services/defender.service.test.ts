@@ -7,7 +7,7 @@ global.fetch = mockFetch;
 
 describe('DefenderService', () => {
   let defenderService: DefenderService;
-  const mockApiUrl = 'http://mock-defender:3001';
+  const mockApiUrl = 'http://simple-defender:3001';
   const mockApiKey = 'test-api-key';
   const mockApiSecret = 'test-api-secret';
   const mockRelayerAddress = '0x' + 'f'.repeat(40);

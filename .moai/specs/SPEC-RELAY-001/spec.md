@@ -25,8 +25,8 @@ Production과 Local 환경이 동일한 아키텍처를 유지합니다:
 ### 환경별 아키텍처
 
 Local (Docker Compose) 환경:
-- Relay 서비스: MockDefender HTTP 서비스 (Docker 컨테이너)
-- API URL: http://mock-defender:3001
+- Relay 서비스: SimpleDefender HTTP 서비스 (Docker 컨테이너)
+- API URL: http://simple-defender:3001
 - Forwarder: ERC2771Forwarder (Hardhat 배포)
 
 Production (Testnet/Mainnet) 환경:
@@ -52,7 +52,7 @@ Production (Testnet/Mainnet) 환경:
 
 모든 환경에서 동일한 HTTP 클라이언트 기반 구조를 사용합니다:
 - DefenderService가 HTTP fetch를 통해 Relay API와 통신
-- MockDefender가 OZ Defender API 호환 HTTP 엔드포인트 제공
+- SimpleDefender가 OZ Defender API 호환 HTTP 엔드포인트 제공
 - DEFENDER_API_URL 환경변수만 변경하여 환경 전환
 
 장점:
@@ -99,23 +99,23 @@ Production (Testnet/Mainnet) 환경:
   - Local: Hardhat 배포 (주소: 0x5FbDB2315678afecb367f032d93F642f64180aa3)
   - Testnet/Mainnet: 별도 배포 필요
 - PaymentGatewayV1이 ERC2771ContextUpgradeable을 상속하고 trustedForwarder가 설정되어 있습니다
-- MockDefender가 OZ Defender API와 동일한 HTTP 인터페이스를 제공합니다
+- SimpleDefender가 OZ Defender API와 동일한 HTTP 인터페이스를 제공합니다
 
 ### 운영 가정
 
 - 환경별 API URL 설정:
-  - Local: DEFENDER_API_URL=http://mock-defender:3001
+  - Local: DEFENDER_API_URL=http://simple-defender:3001
   - Production: DEFENDER_API_URL=https://api.defender.openzeppelin.com
 - Relayer 지갑에 가스비 지불을 위한 충분한 ETH/MATIC이 있습니다
 - Production 환경에서는 OZ Defender API 키가 필요합니다
 
 ## Requirements (요구사항)
 
-### REQ-001: MockDefender HTTP 서비스
+### REQ-001: SimpleDefender HTTP 서비스
 
-EARS 형식: **When** Local 환경에서 Gasless 트랜잭션이 요청될 때, **the system shall** MockDefender HTTP 서비스를 통해 트랜잭션을 처리하여 **so that** OZ Defender API 없이도 동일한 인터페이스로 개발 및 테스트가 가능합니다.
+EARS 형식: **When** Local 환경에서 Gasless 트랜잭션이 요청될 때, **the system shall** SimpleDefender HTTP 서비스를 통해 트랜잭션을 처리하여 **so that** OZ Defender API 없이도 동일한 인터페이스로 개발 및 테스트가 가능합니다.
 
-MockDefender HTTP 엔드포인트:
+SimpleDefender HTTP 엔드포인트:
 - POST /relay: 트랜잭션 제출
 - GET /relay/:id: 트랜잭션 상태 조회
 - GET /relayer: Relayer 정보 조회
@@ -139,7 +139,7 @@ DefenderService 구조:
 EARS 형식: **When** 서버가 시작될 때, **the system shall** DEFENDER_API_URL 환경변수만으로 환경을 전환하여 **so that** 환경별 분기 로직 없이 동일한 코드로 모든 환경을 지원합니다.
 
 환경 전환 방식:
-- DEFENDER_API_URL=http://mock-defender:3001 (Local)
+- DEFENDER_API_URL=http://simple-defender:3001 (Local)
 - DEFENDER_API_URL=https://api.defender.openzeppelin.com (Production)
 - USE_MOCK_DEFENDER 환경변수 제거
 - RelayFactory 제거
@@ -161,7 +161,7 @@ EARS 형식: **When** 트랜잭션이 제출될 때, **the system shall** 트랜
 
 ```
 packages/
-├── mock-defender/                    # MockDefender HTTP 서비스
+├── simple-defender/                  # SimpleDefender HTTP 서비스
 │   ├── package.json
 │   ├── Dockerfile
 │   ├── src/
@@ -181,7 +181,7 @@ packages/
         └── defender.service.test.ts
 ```
 
-### MockDefender HTTP API
+### SimpleDefender HTTP API
 
 POST /relay 요청:
 - to: 대상 주소
@@ -219,19 +219,19 @@ HTTP 요청 헤더:
 
 ### Docker Compose 설정
 
-mock-defender 서비스:
+simple-defender 서비스:
 - 포트: 3001 (내부), 3002 (외부)
 - 환경변수: RELAYER_PRIVATE_KEY, RPC_URL, CHAIN_ID, FORWARDER_ADDRESS
 - 의존성: hardhat
 
 server 서비스:
-- 환경변수: DEFENDER_API_URL=http://mock-defender:3001
+- 환경변수: DEFENDER_API_URL=http://simple-defender:3001
 - 환경변수: RELAYER_ADDRESS
-- 의존성: mock-defender
+- 의존성: simple-defender
 
 ## API 엔드포인트
 
-### MockDefender 엔드포인트
+### SimpleDefender 엔드포인트
 
 POST /relay:
 - 목적: Gasless 트랜잭션 제출
@@ -284,7 +284,7 @@ Local 환경:
 
 ### 내부 의존성
 
-- packages/mock-defender: MockDefender HTTP 서비스
+- packages/simple-defender: SimpleDefender HTTP 서비스
 - packages/pay-server/src/services/defender.service.ts: HTTP 클라이언트
 - packages/contracts/src/ERC2771Forwarder.sol: Forwarder 컨트랙트
 
@@ -304,10 +304,10 @@ Local 환경:
 
 ## Traceability
 
-- REQ-001 → packages/mock-defender/
+- REQ-001 → packages/simple-defender/
 - REQ-002 → packages/pay-server/src/services/defender.service.ts
 - REQ-003 → docker/docker-compose.yml
-- REQ-004 → packages/mock-defender/src/services/relay.service.ts
+- REQ-004 → packages/simple-defender/src/services/relay.service.ts
 
 ## 변경 이력
 
@@ -317,7 +317,7 @@ Local 환경:
 - API 호출 단순화: 3-hop에서 1-hop으로 (Frontend → MetaMask RPC → Contract)
 
 ### v4.0.0 (2025-12-02)
-- MockDefender를 독립 HTTP 서비스로 전환
+- SimpleDefender를 독립 HTTP 서비스로 전환
 - USE_MOCK_DEFENDER 환경변수 제거
 - RelayFactory 제거
 - DEFENDER_API_URL 기반 환경 전환

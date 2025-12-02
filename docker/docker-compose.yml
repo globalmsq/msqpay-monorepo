@@ -45,21 +45,21 @@ services:
     networks:
       - msqpay-network
 
-  # Mock OZ Defender Relay Service (Local gasless transaction relay)
-  mock-defender:
+  # Simple OZ Defender Relay Service (Local gasless transaction relay)
+  simple-defender:
     build:
       context: ..
       dockerfile: docker/Dockerfile.packages
-      target: mock-defender
-    container_name: msqpay-mock-defender
+      target: simple-defender
+    container_name: msqpay-simple-defender
     ports:
       - "3002:3001"
     environment:
       NODE_ENV: development
       HOST: 0.0.0.0
       PORT: 3001
-      # Hardhat private key #0 (deterministic - for local dev only)
-      RELAYER_PRIVATE_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+      # Hardhat private key #2 (deterministic - for local dev only)
+      RELAYER_PRIVATE_KEY: "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
       RPC_URL: http://hardhat:8545
       CHAIN_ID: 31337
       FORWARDER_ADDRESS: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
@@ -94,9 +94,9 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       BLOCKCHAIN_RPC_URL: http://hardhat:8545
-      # Mock Defender API URL (Local gasless relay)
+      # Simple Defender API URL (Local gasless relay)
       # Production: https://api.defender.openzeppelin.com
-      DEFENDER_API_URL: http://mock-defender:3001
+      DEFENDER_API_URL: http://simple-defender:3001
       RELAYER_ADDRESS: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
       # Contract addresses (Hardhat deterministic)
       FORWARDER_ADDRESS: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
@@ -106,7 +106,7 @@ services:
       - mysql
       - redis
       - hardhat
-      - mock-defender
+      - simple-defender
     networks:
       - msqpay-network
 

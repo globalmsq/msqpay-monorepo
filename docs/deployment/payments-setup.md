@@ -8,12 +8,12 @@ MSQPay는 모든 환경에서 동일한 HTTP API 기반 아키텍처를 사용�
 
 | 환경 | Relay 서비스 | API URL | Forwarder |
 |------|-------------|---------|-----------|
-| **Local (Docker Compose)** | MockDefender HTTP 서비스 | http://mock-defender:3001 | ERC2771Forwarder |
+| **Local (Docker Compose)** | SimpleDefender HTTP 서비스 | http://simple-defender:3001 | ERC2771Forwarder |
 | **Testnet (Polygon Amoy)** | OZ Defender API | https://api.defender.openzeppelin.com | ERC2771Forwarder |
 | **Mainnet (Polygon)** | OZ Defender API | https://api.defender.openzeppelin.com | ERC2771Forwarder |
 
 **환경 전환 방식**: `DEFENDER_API_URL` 환경 변수로 제어
-- `http://mock-defender:3001` → Local 개발 환경 (MockDefender Docker 컨테이너)
+- `http://simple-defender:3001` → Local 개발 환경 (SimpleDefender Docker 컨테이너)
 - `https://api.defender.openzeppelin.com` → Production 환경 (OZ Defender API)
 
 ## 배포 전 체크리스트
@@ -38,10 +38,10 @@ MSQPay는 모든 환경에서 동일한 HTTP API 기반 아키텍처를 사용�
 
 ```bash
 # ============================================
-# Relay Configuration (MockDefender HTTP 서비스)
+# Relay Configuration (SimpleDefender HTTP 서비스)
 # ============================================
-DEFENDER_API_URL=http://mock-defender:3001
-# MockDefender HTTP 서비스 URL (Docker 컨테이너)
+DEFENDER_API_URL=http://simple-defender:3001
+# SimpleDefender HTTP 서비스 URL (Docker 컨테이너)
 
 RELAYER_ADDRESS=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 # Relayer 지갑 주소 (Hardhat 기본 계정 #0)
@@ -63,7 +63,7 @@ PORT=3000
 NODE_ENV=development
 ```
 
-**MockDefender 서비스 환경 변수** (mock-defender 컨테이너):
+**SimpleDefender 서비스 환경 변수** (simple-defender 컨테이너):
 ```bash
 RELAYER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 # Hardhat 기본 계정 #0 개인키

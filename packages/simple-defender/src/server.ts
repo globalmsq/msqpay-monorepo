@@ -74,7 +74,7 @@ export async function startServer(): Promise<void> {
 
     console.log(`
 ╔══════════════════════════════════════════════════════════╗
-║                    MockDefender Server                   ║
+║                   SimpleDefender Server                  ║
 ╠══════════════════════════════════════════════════════════╣
 ║  Status:    Running                                      ║
 ║  Host:      ${config.host.padEnd(44)}║
