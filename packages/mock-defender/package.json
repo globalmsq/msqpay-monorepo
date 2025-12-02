@@ -1,0 +1,35 @@
+{
+  "name": "@msqpay/mock-defender",
+  "version": "0.1.0",
+  "description": "Mock OpenZeppelin Defender SDK for local gasless transaction testing",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest --run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest --run --coverage",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0",
+    "eslint": "^8.0.0"
+  },
+  "keywords": [
+    "defender",
+    "mock",
+    "gasless",
+    "blockchain",
+    "testing"
+  ],
+  "author": "MSQ Team",
+  "license": "MIT"
+}
