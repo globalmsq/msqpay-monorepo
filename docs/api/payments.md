@@ -172,9 +172,138 @@ console.log(data.gatewayAddress);   // 0xCf7Ed3AccA5a...
 
 ---
 
-### 2. 결제 상태 조회 (Get Payment Status)
+### 2. Checkout API (상품 기반 결제)
 
-결제의 현재 상태를 블록체인에서 조회합니다.
+상품 배열을 기반으로 결제를 생성합니다. 상점서버(Next.js API Route)에서 상품 가격을 조회하고, 결제서버에 결제 생성을 요청합니다.
+
+> **⚠️ 보안 필수사항**: 이 API는 **상점서버 내부 API Route** 전용입니다.
+> - 클라이언트는 `productId`만 전송
+> - 가격은 서버에서 조회 (클라이언트 조작 방지)
+> - `paymentId`는 결제서버에서 생성
+
+```http
+POST /api/checkout
+Content-Type: application/json
+```
+
+#### 요청 (Request)
+
+```json
+{
+  "products": [
+    { "productId": "prod_001", "quantity": 2 },
+    { "productId": "prod_002", "quantity": 1 }
+  ]
+}
+```
+
+##### Request 필드
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| `products` | array | ✅ | 상품 배열 |
+| `products[].productId` | string | ✅ | 상품 ID (서버에서 가격 조회용) |
+| `products[].quantity` | number | ❌ | 수량 (기본값: 1) |
+
+#### 응답 (Response)
+
+**Status: 201 Created**
+
+```json
+{
+  "success": true,
+  "paymentId": "0x5aed4bae7ce6ecdea52c011b496f09eeef38403bb8b27dd5742dfd03c4296319",
+  "orderId": "ORD-1733235200000-abc123",
+  "products": [
+    {
+      "productId": "prod_001",
+      "productName": "Premium Widget",
+      "quantity": 2,
+      "unitPrice": "50",
+      "subtotal": "100"
+    },
+    {
+      "productId": "prod_002",
+      "productName": "Basic Widget",
+      "quantity": 1,
+      "unitPrice": "25",
+      "subtotal": "25"
+    }
+  ],
+  "totalAmount": "125",
+  "chainId": 31337,
+  "tokenSymbol": "TEST",
+  "tokenAddress": "0xE4C687167705Abf55d709395f92e254bdF5825a2",
+  "decimals": 18,
+  "gatewayAddress": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+  "forwarderAddress": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+  "recipientAddress": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+}
+```
+
+##### Response 필드
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `paymentId` | string | 결제 ID (bytes32, 결제서버에서 생성) |
+| `orderId` | string | 주문 ID (상점서버에서 생성) |
+| `products` | array | 상품 정보 배열 (가격 포함) |
+| `totalAmount` | string | 총 결제 금액 |
+| `chainId` | number | 블록체인 네트워크 ID |
+| `tokenSymbol` | string | 토큰 심볼 |
+| `tokenAddress` | string | 토큰 컨트랙트 주소 |
+| `decimals` | number | 토큰 소수점 자리수 |
+| `gatewayAddress` | string | Payment Gateway 주소 |
+| `forwarderAddress` | string | Gasless 거래용 Forwarder 주소 |
+| `recipientAddress` | string | 결제 수령자 주소 |
+
+#### 에러 응답
+
+```json
+{
+  "success": false,
+  "code": "PRODUCT_NOT_FOUND",
+  "message": "Product not found: prod_999"
+}
+```
+
+##### 에러 코드 (Checkout)
+
+| 코드 | HTTP Status | 설명 |
+|------|-------------|------|
+| `VALIDATION_ERROR` | 400 | 입력 데이터 검증 실패 |
+| `PRODUCT_NOT_FOUND` | 404 | 상품을 찾을 수 없음 |
+| `UNSUPPORTED_CHAIN` | 400 | 지원하지 않는 체인 |
+| `UNSUPPORTED_TOKEN` | 400 | 지원하지 않는 토큰 |
+| `INTERNAL_ERROR` | 500 | 서버 내부 오류 |
+
+#### 사용 예제
+
+**JavaScript/TypeScript (프론트엔드)**
+```typescript
+// 프론트엔드에서는 productId만 전송 (가격 조작 방지)
+const response = await fetch('/api/checkout', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    products: [
+      { productId: 'prod_001', quantity: 2 },
+      { productId: 'prod_002', quantity: 1 }
+    ]
+  })
+});
+
+const data = await response.json();
+console.log(data.paymentId);     // 0x5aed4bae...
+console.log(data.totalAmount);   // 125
+console.log(data.gatewayAddress); // 0xCf7Ed3AccA5a...
+```
+
+---
+
+### 3. 결제 상태 조회 (Get Payment Status)
+
+결제의 현재 상태를 블록체인에서 조회합니다. 서버에서 chainId를 자동으로 결정하므로 클라이언트는 paymentId만 제공하면 됩니다.
 
 ```http
 GET /payments/{id}/status
@@ -184,7 +313,7 @@ GET /payments/{id}/status
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |---------|------|------|------|
-| `id` | string | ✅ | 결제 ID |
+| `id` | string | ✅ | 결제 ID (bytes32 형식, 예: `0x5aed4bae...`) |
 
 #### 응답 (Response)
 
@@ -194,17 +323,12 @@ GET /payments/{id}/status
 {
   "success": true,
   "data": {
-    "id": "payment_123",
-    "userId": "user_123",
-    "amount": 1000000,
-    "currency": "USD",
-    "tokenAddress": "0x2791Bca1f2de4661ED88A30C99a7a9449Aa84174",
-    "recipientAddress": "0x1234567890123456789012345678901234567890",
-    "status": "confirmed",
-    "transactionHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "blockNumber": 42000000,
-    "createdAt": "2024-11-29T10:00:00.000Z",
-    "updatedAt": "2024-11-29T10:01:00.000Z"
+    "paymentId": "0x5aed4bae7ce6ecdea52c011b496f09eeef38403bb8b27dd5742dfd03c4296319",
+    "status": "completed",
+    "payer": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    "merchant": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "amount": "100000000000000000000",
+    "timestamp": 1733235200
   }
 }
 ```
@@ -213,35 +337,39 @@ GET /payments/{id}/status
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
-| `id` | string | 결제 ID |
-| `userId` | string | 사용자 ID |
-| `amount` | number | 결제 금액 |
-| `currency` | string | 통화 |
-| `tokenAddress` | string | 토큰 계약 주소 |
-| `recipientAddress` | string | 수령자 주소 |
-| `status` | string | 결제 상태 |
-| `transactionHash` | string | 트랜잭션 해시 |
-| `blockNumber` | number | 블록 번호 |
-| `createdAt` | ISO8601 | 생성 시간 |
-| `updatedAt` | ISO8601 | 수정 시간 |
+| `paymentId` | string | 결제 ID (bytes32) |
+| `status` | string | 결제 상태 (`pending`, `completed`) |
+| `payer` | string | 결제자 주소 |
+| `merchant` | string | 상점 주소 |
+| `amount` | string | 결제 금액 (Wei 단위) |
+| `timestamp` | number | 결제 완료 시간 (Unix timestamp) |
+
+> **참고**: `chainId`는 서버에서 paymentId를 기반으로 자동 결정됩니다. 클라이언트에서 별도로 전달할 필요가 없습니다.
 
 #### 사용 예제
 
 **cURL**
 ```bash
-curl -X GET http://localhost:3000/payments/payment_123/status
+curl -X GET http://localhost:3001/payments/0x5aed4bae7ce6ecdea52c011b496f09eeef38403bb8b27dd5742dfd03c4296319/status
 ```
 
-**JavaScript**
+**JavaScript/TypeScript (SDK)**
 ```typescript
-const response = await fetch('http://localhost:3000/payments/payment_123/status');
-const data = await response.json();
-console.log(data.data.status); // "confirmed"
+import { MSQPayClient } from '@globalmsq/msqpay';
+
+const client = new MSQPayClient({
+  environment: 'development',
+  apiKey: 'sk_test_abc123'
+});
+
+// chainId 파라미터 불필요 - 서버에서 자동 결정
+const status = await client.getPaymentStatus(paymentId);
+console.log(status.data.status); // "completed"
 ```
 
 ---
 
-### 3. Gasless 거래 제출 (Submit Gasless Transaction)
+### 4. Gasless 거래 제출 (Submit Gasless Transaction)
 
 ERC2771Forwarder를 사용하여 가스비 없이 Meta-Transaction을 실행합니다. 사용자는 EIP-712 형식으로 ForwardRequest에 서명하고, 서버가 Forwarder 컨트랙트를 통해 거래를 제출합니다.
 
@@ -381,7 +509,7 @@ console.log(data.transactionHash);
 
 ---
 
-### 4. 릴레이 거래 실행 (Execute Relay Transaction)
+### 5. 릴레이 거래 실행 (Execute Relay Transaction)
 
 ERC2771Forwarder를 통해 Meta-Transaction을 실행합니다. Gasless 거래 제출 API와 동일한 방식으로 ForwardRequest와 서명을 제출합니다.
 
@@ -477,7 +605,7 @@ console.log(data.transactionHash);
 
 ---
 
-### 5. 결제 이력 조회 (Get Payment History)
+### 6. 결제 이력 조회 (Get Payment History)
 
 사용자의 결제 이력을 조회합니다.
 
@@ -533,7 +661,7 @@ curl -X GET http://localhost:3000/payments/payment_123/history
 
 ---
 
-### 6. 토큰 잔액 조회 (Get Token Balance)
+### 7. 토큰 잔액 조회 (Get Token Balance)
 
 ERC-20 토큰의 지갑 잔액을 조회합니다.
 
@@ -583,7 +711,7 @@ curl -X GET "http://localhost:3000/tokens/balance?tokenAddress=0x2791Bca1f2de466
 
 ---
 
-### 7. 토큰 Approval 조회 (Get Token Allowance)
+### 8. 토큰 Approval 조회 (Get Token Allowance)
 
 토큰 approval 금액을 조회합니다.
 
@@ -636,7 +764,7 @@ curl -X GET "http://localhost:3000/tokens/allowance?tokenAddress=0x2791Bca1f2de4
 
 ---
 
-### 8. 거래 상태 조회 (Get Transaction Status)
+### 9. 거래 상태 조회 (Get Transaction Status)
 
 트랜잭션 상태와 확인 정보를 조회합니다.
 

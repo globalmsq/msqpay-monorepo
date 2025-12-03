@@ -66,6 +66,108 @@ NEXT_PUBLIC_WC_PROJECT_ID=your_wallet_connect_project_id
 
 ## 주요 기능
 
+### Checkout 플로우 (상품 기반 결제)
+
+Checkout 플로우는 상품 배열을 기반으로 안전한 결제를 생성합니다.
+
+> **⚠️ 보안 핵심**: 프론트엔드는 `productId`만 전송하고, 가격은 서버에서 조회합니다.
+
+#### 동작 방식
+
+```
+1. 사용자가 상품 선택 (ProductCard 클릭)
+   └─ 프론트엔드: { products: [{ productId, quantity }] } 전송
+
+2. Next.js API Route (/api/checkout)
+   └─ 상품 가격 조회 (lib/products.ts)
+   └─ 총액 계산
+   └─ 결제서버 API 호출 (MSQPayClient.createPayment)
+
+3. 결제서버 응답
+   └─ paymentId 생성 (bytes32, merchantId + orderId 기반)
+   └─ 컨트랙트 주소 반환
+
+4. 클라이언트에서 결제 진행
+   └─ paymentId로 결제 상태 폴링
+   └─ 블록체인 트랜잭션 실행
+```
+
+#### 구현 예제
+
+**상품 카드 컴포넌트 (ProductCard.tsx)**
+```typescript
+interface Product {
+  id: string;
+  name: string;
+  price: string;
+  description: string;
+}
+
+export function ProductCard({ product, onBuy }: { product: Product; onBuy: (productId: string) => void }) {
+  return (
+    <div className="product-card">
+      <h3>{product.name}</h3>
+      <p>{product.description}</p>
+      <p className="price">{product.price} TEST</p>
+      {/* ⚠️ productId만 전송 - 가격은 서버에서 조회 */}
+      <button onClick={() => onBuy(product.id)}>
+        Purchase
+      </button>
+    </div>
+  );
+}
+```
+
+**Checkout API 호출 (lib/api.ts)**
+```typescript
+interface CheckoutParams {
+  products: Array<{ productId: string; quantity?: number }>;
+}
+
+interface CheckoutResponse {
+  success: boolean;
+  paymentId: string;
+  orderId: string;
+  totalAmount: string;
+  gatewayAddress: string;
+  forwarderAddress: string;
+  tokenAddress: string;
+  decimals: number;
+}
+
+export async function checkout(params: CheckoutParams): Promise<CheckoutResponse> {
+  const response = await fetch('/api/checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message);
+  }
+
+  return response.json();
+}
+```
+
+**결제 상태 조회 (SDK 사용)**
+```typescript
+import { MSQPayClient } from '@globalmsq/msqpay';
+
+const client = new MSQPayClient({
+  environment: 'custom',
+  apiKey: 'demo-key',
+  apiUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+});
+
+// paymentId만으로 상태 조회 (chainId 불필요)
+const status = await client.getPaymentStatus(paymentId);
+console.log(status.data.status); // "pending" | "completed"
+```
+
+---
+
 ### Payment History (결제 이력 조회)
 
 PaymentHistory 컴포넌트는 현재 연결된 지갑의 모든 결제 이력을 표시합니다.

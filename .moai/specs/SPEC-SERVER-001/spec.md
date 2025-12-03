@@ -2,9 +2,10 @@
 id: SPEC-SERVER-001
 title: MSQPay 결제 서버 (Payment Server)
 category: backend
-status: draft
+status: superseded
+superseded_by: SPEC-SERVER-002
 created_at: 2025-11-28
-updated_at: 2025-11-28
+updated_at: 2025-12-03
 author: @user
 tags:
   - backend
@@ -15,6 +16,8 @@ tags:
 ---
 
 # SPEC-SERVER-001: MSQPay 결제 서버 (Payment Server)
+
+> **Note**: 이 SPEC은 SPEC-SERVER-002로 대체되었습니다. 최신 결제 서버 사양은 SPEC-SERVER-002를 참조하세요.
 
 ## 1. 개요 (Overview)
 

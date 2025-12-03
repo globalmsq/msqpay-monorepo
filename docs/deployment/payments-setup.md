@@ -128,7 +128,51 @@ CORS_ORIGIN=https://app.msqpay.io
 # 클라이언트 도메인
 ```
 
-### 1.2 .env.production 파일 작성
+### 1.2 멀티체인 설정 (chains.json)
+
+Pay Server는 `chains.json` 설정 파일을 통해 멀티체인을 지원합니다. 환경별로 다른 설정 파일을 사용할 수 있습니다.
+
+#### 설정 파일 종류
+
+| 파일 | 환경 | 설명 |
+|------|------|------|
+| `chains.json` | Local | Hardhat 로컬 개발 환경 |
+| `chains.testnet.json` | Testnet | Polygon Amoy 테스트넷 |
+| `chains.production.json` | Production | Polygon Mainnet |
+
+#### 설정 파일 구조
+
+```json
+{
+  "31337": {
+    "name": "Hardhat",
+    "rpcUrl": "http://hardhat:8545",
+    "gateway": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+    "forwarder": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+    "tokens": {
+      "TEST": {
+        "address": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
+        "decimals": 18
+      }
+    }
+  }
+}
+```
+
+#### 환경 변수로 설정 파일 지정
+
+```bash
+# 로컬 개발 (기본값)
+CHAINS_CONFIG_PATH=chains.json
+
+# 테스트넷
+CHAINS_CONFIG_PATH=chains.testnet.json
+
+# 프로덕션
+CHAINS_CONFIG_PATH=chains.production.json
+```
+
+### 1.3 .env.production 파일 작성
 
 ```bash
 # Linux/macOS

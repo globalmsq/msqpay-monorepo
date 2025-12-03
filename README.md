@@ -154,34 +154,37 @@ import { MSQPayClient } from '@globalmsq/msqpay';
 
 // 초기화
 const client = new MSQPayClient({
-  environment: 'development',
+  environment: 'development', // 또는 'custom' + apiUrl
   apiKey: 'sk_test_abc123'
 });
 
-// 결제 생성
+// 결제 생성 (상점서버에서 호출)
 const payment = await client.createPayment({
-  userId: 'user_123',
-  amount: 1000,
-  currency: 'USD',
-  tokenAddress: '0xE4C687167705Abf55d709395f92e254bdF5825a2',
-  recipientAddress: '0x...'
+  merchantId: 'merchant_001',
+  orderId: 'ORD-12345',
+  amount: 100,
+  currency: 'TEST',
+  chainId: 31337,
+  recipientAddress: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+  tokenAddress: '0xE4C687167705Abf55d709395f92e254bdF5825a2'
 });
 
-// 상태 조회
+// 상태 조회 (chainId 불필요 - 서버에서 자동 결정)
 const status = await client.getPaymentStatus(payment.paymentId);
+console.log(status.data.status); // "pending" | "completed"
 
-// Gasless 거래 제출
+// Gasless 거래 제출 (EIP-712 서명 필요)
 const gaslessResult = await client.submitGasless({
   paymentId: payment.paymentId,
-  forwarderAddress: '0x...',
+  forwardRequest: { from, to, value, gas, nonce, deadline, data },
   signature: '0x...'
 });
 
 // Relay 거래 실행
 const relayResult = await client.executeRelay({
   paymentId: payment.paymentId,
-  transactionData: '0x...',
-  gasEstimate: 100000
+  forwardRequest: { from, to, value, gas, nonce, deadline, data },
+  signature: '0x...'
 });
 ```
 
@@ -194,7 +197,8 @@ const relayResult = await client.executeRelay({
 | 엔드포인트 | 메서드 | 용도 |
 |-----------|--------|------|
 | `/payments/create` | POST | 결제 생성, paymentId 발급 |
-| `/payments/:id/status` | GET | 결제 상태 조회 (Contract 조회) |
+| `/api/checkout` | POST | 상품 기반 결제 (Demo App API Route) |
+| `/payments/:id/status` | GET | 결제 상태 조회 (chainId 자동 결정) |
 | `/payments/:id/gasless` | POST | Gasless 거래 제출 |
 | `/payments/:id/relay` | POST | 릴레이 거래 실행 |
 | `/payments/:id/history` | GET | 결제 이력 조회 |
@@ -230,6 +234,7 @@ ERC-20 토큰의 지갑 상태를 조회합니다:
 | 변수 | 용도 | 예시 |
 |------|------|------|
 | `BLOCKCHAIN_RPC_URL` | 블록체인 RPC 엔드포인트 | `https://polygon-rpc.com` |
+| `CHAINS_CONFIG_PATH` | 멀티체인 설정 파일 경로 | `chains.json` |
 | `GATEWAY_ADDRESS` | PaymentGateway 계약 주소 | `0x...` |
 | `DEFENDER_RELAYER_ADDRESS` | OpenZeppelin Defender 릴레이 주소 | `0x...` |
 | `DEFENDER_API_KEY` | Defender API 키 | `sk_...` |
