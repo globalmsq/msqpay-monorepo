@@ -9,6 +9,7 @@
 | 우선순위 | HIGH |
 | 상태 | Draft |
 | 생성일 | 2025-12-03 |
+| 수정일 | 2025-12-04 |
 | 도메인 | Backend / Infrastructure |
 
 ---
@@ -29,6 +30,14 @@ pay-server는 현재 stateless 상태로 운영되고 있으며, 다음과 같�
 const DEFAULT_CHAIN_ID = 31337;
 ```
 
+**보안 취약점**
+
+기존 설계에서는 payments 테이블에 token_address, chain_id, recipient_address를 직접 저장하는 방식이었습니다. 이는 다음과 같은 보안 위험을 초래합니다.
+
+- 해킹 시 recipient_address 조작 가능성
+- token_address 변조를 통한 부정 결제 위험
+- 데이터 무결성 검증 어려움
+
 **영향 범위**
 
 - 멀티체인 지원 불가: paymentId에서 chainId를 조회할 수 없어 단일 체인만 지원
@@ -40,7 +49,8 @@ const DEFAULT_CHAIN_ID = 31337;
 - Prisma ORM을 통한 MySQL 8.0 데이터베이스 연동
 - Redis 캐싱을 통한 성능 최적화
 - paymentId 기반 동적 chainId 조회 지원
-- 멀티체인 결제 시스템 완성
+- 멀티체인/멀티토큰 결제 시스템 완성
+- 보안 강화된 스키마 설계 (민감 정보 분리)
 
 ---
 
@@ -76,6 +86,10 @@ const DEFAULT_CHAIN_ID = 31337;
 
 > 시스템은 결제 상태 조회 시 Redis 캐시를 먼저 확인하고, 캐시 미스 시에만 데이터베이스를 조회해야 한다.
 
+**UBI-004**: 논리적 참조 무결성
+
+> 시스템은 FK 제약조건 없이 논리적 참조를 통해 데이터 무결성을 애플리케이션 레벨에서 보장해야 한다.
+
 ### 2.3 이벤트 기반 요구사항 (EVENT-DRIVEN)
 
 **EVT-001**: 결제 생성 이벤트
@@ -108,6 +122,10 @@ const DEFAULT_CHAIN_ID = 31337;
 
 > 결제가 pending 상태인 동안, 시스템은 블록체인 상태와 동기화를 시도해야 한다.
 
+**STA-004**: Soft Delete 상태 관리
+
+> is_deleted가 true인 레코드는 일반 조회에서 제외되어야 하며, is_enabled가 false인 레코드는 새로운 결제에 사용할 수 없어야 한다.
+
 ### 2.5 금지 요구사항 (UNWANTED)
 
 **UNW-001**: 하드코딩 chainId 사용 금지
@@ -116,11 +134,19 @@ const DEFAULT_CHAIN_ID = 31337;
 
 **UNW-002**: 민감 정보 로깅 금지
 
-> 시스템은 데이터베이스 비밀번호, 개인키 등 민감 정보를 로그에 출력하지 않아야 한다.
+> 시스템은 데이터베이스 비밀번호, API 키, 개인키 등 민감 정보를 로그에 출력하지 않아야 한다.
 
 **UNW-003**: 캐시 무한 TTL 금지
 
 > 시스템은 Redis 캐시에 무한 TTL을 설정하지 않아야 한다 (최대 TTL: 1시간).
+
+**UNW-004**: FK 제약조건 사용 금지
+
+> 시스템은 데이터베이스 레벨의 Foreign Key 제약조건을 사용하지 않아야 한다. 참조 무결성은 애플리케이션 레벨에서 관리한다.
+
+**UNW-005**: Hard Delete 금지
+
+> 시스템은 merchants, tokens, chains 테이블의 레코드를 물리적으로 삭제하지 않아야 한다. Soft Delete 패턴을 사용해야 한다.
 
 ### 2.6 선택적 요구사항 (OPTIONAL)
 
@@ -132,53 +158,146 @@ const DEFAULT_CHAIN_ID = 31337;
 
 > 가능한 경우, 자주 조회되는 결제 데이터를 서버 시작 시 미리 캐싱할 수 있어야 한다.
 
+**OPT-003**: RPC 백업 지원 (향후 구현)
+
+> 향후 구현으로, chains 테이블에 backup_rpc_url 필드를 추가하여 RPC 장애 시 백업 노드 사용을 지원할 수 있어야 한다.
+
 ---
 
 ## 3. 데이터 모델
 
-### 3.1 Prisma 스키마 설계
+### 3.1 스키마 설계 원칙
 
-**payments 테이블**
+**보안 강화 설계**
 
-- id: 자동 증가 기본키
-- payment_id: bytes32 해시 (유니크, 인덱스)
-- merchant_id: 가맹점 식별자
-- order_id: 주문 식별자
-- chain_id: 블록체인 네트워크 ID
-- token_address: ERC20 토큰 컨트랙트 주소
-- recipient_address: 수취인 지갑 주소
-- amount: 결제 금액 (wei 단위, Decimal)
-- currency: 통화 심볼 (USDT, USDC 등)
-- status: 결제 상태 (PENDING, PROCESSING, COMPLETED, FAILED)
-- created_at: 생성 시간
-- updated_at: 수정 시간
+- 민감한 결제 정보(recipient_address, token_address)를 payments 테이블에 직접 저장하지 않음
+- merchant_payment_methods 테이블을 통해 간접 참조하여 조작 위험 최소화
+- API 키는 SHA-256 해시로 저장 (api_key_hash)
 
-**relay_requests 테이블**
+**Soft Delete 패턴**
 
-- id: 자동 증가 기본키
-- relay_request_id: Defender/Simple-Defender 요청 ID
-- payment_id: payments 테이블 참조 (외래키)
-- forwarder_address: EIP-2771 Forwarder 컨트랙트 주소
-- tx_hash: 트랜잭션 해시 (nullable)
-- status: 릴레이 상태 (SUBMITTED, PENDING, CONFIRMED, FAILED)
-- created_at: 생성 시간
-- updated_at: 수정 시간
+- is_enabled: 활성/비활성 상태 (비활성화된 항목은 새 결제에 사용 불가)
+- is_deleted: 삭제 여부 (삭제된 항목은 조회에서 제외)
+- deleted_at: 삭제 시점 기록
 
-**payment_events 테이블**
+**논리적 참조 (No FK)**
 
-- id: 자동 증가 기본키
-- payment_id: payments 테이블 참조 (외래키)
-- event_type: 이벤트 유형 (CREATED, SUBMITTED, CONFIRMED, FAILED)
-- event_data: JSON 형식 추가 데이터
-- created_at: 이벤트 발생 시간
+- 데이터베이스 레벨 FK 제약조건 없이 애플리케이션에서 참조 무결성 관리
+- 유연한 데이터 마이그레이션 및 운영 가능
 
-### 3.2 인덱스 전략
+### 3.2 테이블 구조 (7개 테이블)
 
-- payments.payment_id: UNIQUE INDEX
-- payments.merchant_id + order_id: COMPOSITE INDEX
-- payments.status + created_at: COMPOSITE INDEX (상태별 목록 조회용)
-- relay_requests.payment_id: INDEX (조인용)
-- payment_events.payment_id + created_at: COMPOSITE INDEX (이벤트 이력 조회용)
+**chains 테이블** - 블록체인 네트워크 정보
+
+- id: INT AUTO_INCREMENT PRIMARY KEY
+- network_id: INT UNIQUE NOT NULL (EIP-155 체인 ID, 예: 1, 137, 31337)
+- name: VARCHAR(100) NOT NULL (예: Ethereum, Polygon, Hardhat)
+- rpc_url: VARCHAR(500) NOT NULL
+- explorer_url: VARCHAR(500) NULL
+- is_enabled: BOOLEAN DEFAULT TRUE
+- is_deleted: BOOLEAN DEFAULT FALSE
+- deleted_at: DATETIME NULL
+- created_at: DATETIME DEFAULT NOW
+- updated_at: DATETIME ON UPDATE NOW
+
+**tokens 테이블** - 토큰 정보 (체인별)
+
+- id: INT AUTO_INCREMENT PRIMARY KEY
+- chain_id: INT NOT NULL (→ chains.id 논리적 참조)
+- address: VARCHAR(42) NOT NULL (토큰 컨트랙트 주소)
+- symbol: VARCHAR(20) NOT NULL (예: USDT, USDC)
+- name: VARCHAR(100) NOT NULL
+- decimals: INT NOT NULL (예: 6, 18)
+- is_enabled: BOOLEAN DEFAULT TRUE
+- is_deleted: BOOLEAN DEFAULT FALSE
+- deleted_at: DATETIME NULL
+- created_at: DATETIME DEFAULT NOW
+- updated_at: DATETIME ON UPDATE NOW
+- UNIQUE(chain_id, address)
+
+**merchants 테이블** - 가맹점 정보
+
+- id: INT AUTO_INCREMENT PRIMARY KEY
+- merchant_key: VARCHAR(100) UNIQUE NOT NULL (외부 노출용 식별자)
+- name: VARCHAR(255) NOT NULL
+- api_key_hash: VARCHAR(64) NOT NULL (SHA-256 해시)
+- webhook_url: VARCHAR(500) NULL
+- is_enabled: BOOLEAN DEFAULT TRUE
+- is_deleted: BOOLEAN DEFAULT FALSE
+- deleted_at: DATETIME NULL
+- created_at: DATETIME DEFAULT NOW
+- updated_at: DATETIME ON UPDATE NOW
+
+**merchant_payment_methods 테이블** - 가맹점별 결제 수단
+
+- id: INT AUTO_INCREMENT PRIMARY KEY
+- merchant_id: INT NOT NULL (→ merchants.id 논리적 참조)
+- token_id: INT NOT NULL (→ tokens.id 논리적 참조)
+- recipient_address: VARCHAR(42) NOT NULL (수취 지갑 주소)
+- is_enabled: BOOLEAN DEFAULT TRUE
+- is_deleted: BOOLEAN DEFAULT FALSE
+- deleted_at: DATETIME NULL
+- created_at: DATETIME DEFAULT NOW
+- updated_at: DATETIME ON UPDATE NOW
+- UNIQUE(merchant_id, token_id)
+
+**payments 테이블** - 결제 정보
+
+- id: INT AUTO_INCREMENT PRIMARY KEY
+- payment_hash: VARCHAR(66) UNIQUE NOT NULL (bytes32 해시)
+- payment_method_id: INT NOT NULL (→ merchant_payment_methods.id 논리적 참조)
+- order_id: VARCHAR(255) NOT NULL
+- amount: DECIMAL(78,0) NOT NULL (wei 단위)
+- decimals: INT NOT NULL (결제 시점 토큰 decimals 스냅샷)
+- status: ENUM('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED') DEFAULT 'PENDING'
+- created_at: DATETIME DEFAULT NOW
+- updated_at: DATETIME ON UPDATE NOW
+- INDEX(payment_method_id)
+- INDEX(status, created_at)
+
+**relay_requests 테이블** - Gasless 릴레이 요청
+
+- id: INT AUTO_INCREMENT PRIMARY KEY
+- relay_ref: VARCHAR(255) UNIQUE NOT NULL (Defender/Simple-Defender 요청 ID)
+- payment_id: INT NOT NULL (→ payments.id 논리적 참조)
+- forwarder_address: VARCHAR(42) NOT NULL
+- tx_hash: VARCHAR(66) NULL
+- status: ENUM('SUBMITTED', 'PENDING', 'CONFIRMED', 'FAILED') DEFAULT 'SUBMITTED'
+- created_at: DATETIME DEFAULT NOW
+- updated_at: DATETIME ON UPDATE NOW
+- INDEX(payment_id)
+
+**payment_events 테이블** - 결제 이벤트 로그
+
+- id: INT AUTO_INCREMENT PRIMARY KEY
+- payment_id: INT NOT NULL (→ payments.id 논리적 참조)
+- event_type: ENUM('CREATED', 'SUBMITTED', 'CONFIRMED', 'FAILED')
+- event_data: JSON NULL
+- created_at: DATETIME DEFAULT NOW
+- INDEX(payment_id, created_at)
+
+### 3.3 인덱스 전략
+
+- chains.network_id: UNIQUE INDEX
+- tokens(chain_id, address): COMPOSITE UNIQUE INDEX
+- merchants.merchant_key: UNIQUE INDEX
+- merchant_payment_methods(merchant_id, token_id): COMPOSITE UNIQUE INDEX
+- payments.payment_hash: UNIQUE INDEX
+- payments(payment_method_id): INDEX
+- payments(status, created_at): COMPOSITE INDEX (상태별 목록 조회용)
+- relay_requests.relay_ref: UNIQUE INDEX
+- relay_requests(payment_id): INDEX
+- payment_events(payment_id, created_at): COMPOSITE INDEX (이벤트 이력 조회용)
+
+### 3.4 데이터 조회 경로
+
+**결제 생성 시 chainId 조회 경로**
+
+payments → merchant_payment_methods → tokens → chains
+
+**결제 상태 조회 시 전체 정보 경로**
+
+payments JOIN merchant_payment_methods JOIN tokens JOIN chains JOIN merchants
 
 ---
 
@@ -212,6 +331,9 @@ REDIS_URL=redis://localhost:6379
 - packages/pay-server/src/db/client.ts
 - packages/pay-server/src/db/redis.ts
 - packages/pay-server/src/services/database.service.ts
+- packages/pay-server/src/services/chain.service.ts
+- packages/pay-server/src/services/merchant.service.ts
+- packages/pay-server/src/services/token.service.ts
 
 ### 5.2 수정되는 파일
 
@@ -230,6 +352,7 @@ REDIS_URL=redis://localhost:6379
 - Prisma 6.x는 Node.js 18+ 필요
 - MySQL 8.0의 utf8mb4 인코딩 사용 필수
 - Redis 연결 실패 시에도 서비스 가용성 유지 (graceful degradation)
+- FK 제약조건 미사용 (애플리케이션 레벨 참조 무결성)
 
 ### 6.2 성능 제약
 
@@ -242,6 +365,7 @@ REDIS_URL=redis://localhost:6379
 - 모든 데이터베이스 연결은 TLS 암호화 권장 (프로덕션)
 - 환경 변수를 통한 자격 증명 관리
 - SQL 인젝션 방지 (Prisma 기본 제공)
+- API 키는 SHA-256 해시로만 저장
 
 ---
 
@@ -252,12 +376,15 @@ REDIS_URL=redis://localhost:6379
 - DatabaseService의 CRUD 메서드 테스트
 - Redis 캐시 로직 테스트
 - Prisma 쿼리 결과 매핑 테스트
+- Soft Delete 로직 테스트
+- API 키 해시 검증 테스트
 
 ### 7.2 통합 테스트
 
 - 실제 MySQL/Redis 컨테이너를 사용한 E2E 테스트
 - 결제 생성 -> 상태 조회 플로우 테스트
 - Gasless 요청 저장 및 조회 테스트
+- 멀티체인/멀티토큰 시나리오 테스트
 
 ### 7.3 성능 테스트
 
@@ -274,6 +401,14 @@ REDIS_URL=redis://localhost:6379
 
 ---
 
+## 9. 향후 확장 계획
+
+### 9.1 RPC 백업 지원
+
+chains 테이블에 backup_rpc_url 필드를 추가하여 RPC 노드 장애 시 자동 전환 기능을 구현할 예정입니다. 현재 버전에서는 문서화만 진행하고 구현은 향후 진행합니다.
+
+---
+
 ## TAG
 
 ```
@@ -283,4 +418,6 @@ type: feature
 priority: high
 dependencies: SPEC-SERVER-001
 affects: pay-server
+schema-version: 2.0
+tables: chains, tokens, merchants, merchant_payment_methods, payments, relay_requests, payment_events
 ```
