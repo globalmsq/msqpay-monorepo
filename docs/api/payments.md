@@ -607,17 +607,19 @@ console.log(data.transactionHash);
 
 ### 6. 결제 이력 조회 (Get Payment History)
 
-사용자의 결제 이력을 조회합니다.
+사용자(payer)의 결제 이력을 블록체인 이벤트와 DB에서 조회합니다. Gasless 결제 여부와 Relay ID도 포함됩니다.
 
 ```http
-GET /payments/{id}/history
+GET /payments/history?chainId={chainId}&payer={payerAddress}&limit={limit}
 ```
 
-#### URL 파라미터
+#### 쿼리 파라미터
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |---------|------|------|------|
-| `id` | string | ✅ | 결제 ID |
+| `chainId` | number | ✅ | 블록체인 네트워크 ID |
+| `payer` | string | ✅ | 결제자 지갑 주소 |
+| `limit` | number | ❌ | 조회할 블록 범위 (기본값: 1000) |
 
 #### 응답 (Response)
 
@@ -626,18 +628,22 @@ GET /payments/{id}/history
 ```json
 {
   "success": true,
-  "data": {
-    "paymentId": "payment_123",
-    "history": [
-      {
-        "txHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "status": "confirmed",
-        "timestamp": "2024-11-29T10:01:00.000Z",
-        "blockNumber": 42000000,
-        "confirmations": 5
-      }
-    ]
-  }
+  "data": [
+    {
+      "paymentId": "0x5aed4bae7ce6ecdea52c011b496f09eeef38403bb8b27dd5742dfd03c4296319",
+      "payer": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+      "merchant": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      "token": "0xE4C687167705Abf55d709395f92e254bdF5825a2",
+      "tokenSymbol": "TEST",
+      "decimals": 18,
+      "amount": "100000000000000000000",
+      "timestamp": "1733235200",
+      "transactionHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "completed",
+      "isGasless": true,
+      "relayId": "relay_abc123"
+    }
+  ]
 }
 ```
 
@@ -645,18 +651,34 @@ GET /payments/{id}/history
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
-| `paymentId` | string | 결제 ID |
-| `history` | array | 거래 이력 배열 |
-| `history[].txHash` | string | 트랜잭션 해시 |
-| `history[].status` | string | 거래 상태 |
-| `history[].timestamp` | ISO8601 | 거래 시간 |
-| `history[].blockNumber` | number | 블록 번호 |
-| `history[].confirmations` | number | 확인 수 |
+| `paymentId` | string | 결제 ID (bytes32) |
+| `payer` | string | 결제자 주소 |
+| `merchant` | string | 상점 주소 |
+| `token` | string | 토큰 컨트랙트 주소 |
+| `tokenSymbol` | string | 토큰 심볼 |
+| `decimals` | number | 토큰 소수점 자리수 |
+| `amount` | string | 결제 금액 (Wei 단위) |
+| `timestamp` | string | 결제 완료 시간 (Unix timestamp) |
+| `transactionHash` | string | 트랜잭션 해시 |
+| `status` | string | 결제 상태 |
+| `isGasless` | boolean | Gasless 결제 여부 |
+| `relayId` | string? | Relay 요청 ID (Gasless인 경우에만) |
 
 #### 사용 예제
 
 ```bash
-curl -X GET http://localhost:3000/payments/payment_123/history
+curl -X GET "http://localhost:3001/payments/history?chainId=31337&payer=0x70997970C51812dc3A010C7d01b50e0d17dc79C8&limit=1000"
+```
+
+```typescript
+// Demo App에서 사용
+const response = await fetch(
+  `${API_URL}/payments/history?chainId=${chainId}&payer=${address}&limit=1000`
+);
+const data = await response.json();
+
+// Gasless 결제 필터링
+const gaslessPayments = data.data.filter(p => p.isGasless);
 ```
 
 ---

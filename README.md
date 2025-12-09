@@ -11,7 +11,7 @@ Multi-Service Blockchain Payment Gateway - ERC-20 토큰 결제 게이트웨이
 | 원칙 | 설명 |
 |------|------|
 | **Contract = Source of Truth** | 결제 완료 여부는 오직 스마트 컨트랙트만 신뢰 |
-| **Stateless MVP** | DB/Redis/이벤트 모니터링 없이 Contract 직접 조회 |
+| **DB 통합 아키텍처** | MySQL + Redis 캐싱 통합, Contract = Source of Truth 유지 |
 | **동일 API 인터페이스** | MVP와 Production 모두 같은 API 형태 |
 | **서버 발급 paymentId** | 결제서버가 유일한 paymentId 생성자 |
 | **상점서버 ↔ 블록체인 분리** | 상점서버는 결제서버 API만 호출, 블록체인 접근 불가 |
@@ -201,7 +201,7 @@ const relayResult = await client.executeRelay({
 | `/payments/:id/status` | GET | 결제 상태 조회 (chainId 자동 결정) |
 | `/payments/:id/gasless` | POST | Gasless 거래 제출 |
 | `/payments/:id/relay` | POST | 릴레이 거래 실행 |
-| `/payments/:id/history` | GET | 결제 이력 조회 |
+| `/payments/history` | GET | 결제 이력 조회 (payer 기반) |
 | `/tokens/balance` | GET | 토큰 잔액 조회 |
 | `/tokens/allowance` | GET | 토큰 approval 금액 조회 |
 | `/transactions/:id/status` | GET | 거래 상태 조회 |
@@ -209,10 +209,10 @@ const relayResult = await client.executeRelay({
 ### 최근 추가 기능
 
 #### Payment History API
-사용자의 결제 이력을 블록체인에서 조회합니다:
-- **엔드포인트**: `GET /payments/:id/history`
-- **기능**: 결제 ID에 따른 거래 이력 조회
-- **응답**: 거래 해시, 상태, 타임스탬프, 확인 수
+사용자의 결제 이력을 블록체인 이벤트와 DB에서 조회합니다:
+- **엔드포인트**: `GET /payments/history?chainId={}&payer={}&limit={}`
+- **기능**: 결제자(payer) 주소 기반 이력 조회
+- **응답**: 결제 목록 (Gasless 여부, Relay ID, Token decimals/symbol 포함)
 
 #### Token Balance/Allowance API
 ERC-20 토큰의 지갑 상태를 조회합니다:

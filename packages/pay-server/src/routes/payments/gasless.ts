@@ -2,6 +2,8 @@ import { FastifyInstance } from 'fastify';
 import { Address } from 'viem';
 import { GaslessRequestSchema, ForwardRequest } from '../../schemas/payment.schema';
 import { DefenderService } from '../../services/defender.service';
+import { RelayService } from '../../services/relay.service';
+import { PaymentService } from '../../services/payment.service';
 
 export interface SubmitGaslessRequest {
   paymentId: string;
@@ -11,7 +13,9 @@ export interface SubmitGaslessRequest {
 
 export async function submitGaslessRoute(
   app: FastifyInstance,
-  defenderService: DefenderService
+  defenderService: DefenderService,
+  relayService: RelayService,
+  paymentService: PaymentService
 ) {
   app.post<{ Params: { id: string }; Body: SubmitGaslessRequest }>(
     '/payments/:id/gasless',
@@ -41,6 +45,23 @@ export async function submitGaslessRoute(
           throw error;
         }
 
+        // Payment 조회
+        const payment = await paymentService.findByHash(id);
+        if (!payment) {
+          return reply.code(404).send({
+            code: 'PAYMENT_NOT_FOUND',
+            message: '결제를 찾을 수 없습니다',
+          });
+        }
+
+        // 이미 처리된 결제인지 확인
+        if (payment.status !== 'CREATED' && payment.status !== 'PENDING') {
+          return reply.code(400).send({
+            code: 'INVALID_PAYMENT_STATUS',
+            message: `결제 상태가 ${payment.status}입니다. Gasless 요청은 CREATED 또는 PENDING 상태에서만 가능합니다.`,
+          });
+        }
+
         // ForwardRequest 서명 검증
         if (!defenderService.validateTransactionData(validatedData.forwardRequest.signature)) {
           return reply.code(400).send({
@@ -55,6 +76,17 @@ export async function submitGaslessRoute(
           validatedData.forwarderAddress as Address,
           validatedData.forwardRequest
         );
+
+        // DB에 RelayRequest 저장
+        await relayService.create({
+          relay_ref: result.relayRequestId,
+          payment_id: payment.id,
+        });
+
+        // Payment 상태를 PENDING으로 업데이트
+        if (payment.status === 'CREATED') {
+          await paymentService.updateStatus(payment.id, 'PENDING');
+        }
 
         return reply.code(202).send({
           success: true,

@@ -50,6 +50,21 @@ export async function getPaymentStatusRoute(
         });
       }
 
+      // Sync DB status with on-chain status
+      // If on-chain payment is completed but DB still shows CREATED/PENDING, update DB
+      let finalStatus = paymentData.status;
+      if (
+        paymentStatus.status === 'completed' &&
+        ['CREATED', 'PENDING'].includes(paymentData.status)
+      ) {
+        await paymentService.updateStatusByHash(
+          paymentData.payment_hash,
+          'CONFIRMED',
+          paymentStatus.transactionHash
+        );
+        finalStatus = 'CONFIRMED';
+      }
+
       return reply.code(200).send({
         success: true,
         data: {
@@ -57,7 +72,7 @@ export async function getPaymentStatusRoute(
           payment_hash: paymentData.payment_hash,
           network_id: paymentData.network_id,
           token_symbol: paymentData.token_symbol,
-          status: paymentData.status,
+          status: finalStatus,
         },
       });
     } catch (error) {

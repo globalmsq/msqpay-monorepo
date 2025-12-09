@@ -1,7 +1,7 @@
 import { PrismaClient, Token } from '@prisma/client';
 
 export interface CreateTokenInput {
-  chain_id: string;
+  chain_id: number;
   address: string;
   symbol: string;
   decimals: number;
@@ -29,7 +29,7 @@ export class TokenService {
     });
   }
 
-  async findById(id: string): Promise<Token | null> {
+  async findById(id: number): Promise<Token | null> {
     return this.prisma.token.findFirst({
       where: {
         id,
@@ -38,7 +38,7 @@ export class TokenService {
     });
   }
 
-  async findByAddress(chainId: string, address: string): Promise<Token | null> {
+  async findByAddress(chainId: number, address: string): Promise<Token | null> {
     return this.prisma.token.findFirst({
       where: {
         chain_id: chainId,
@@ -48,7 +48,7 @@ export class TokenService {
     });
   }
 
-  async findAllOnChain(chainId: string, includeDisabled: boolean = false): Promise<Token[]> {
+  async findAllOnChain(chainId: number, includeDisabled: boolean = false): Promise<Token[]> {
     const whereClause: any = {
       chain_id: chainId,
       is_deleted: false,
@@ -64,7 +64,7 @@ export class TokenService {
     });
   }
 
-  async update(id: string, input: UpdateTokenInput): Promise<Token> {
+  async update(id: number, input: UpdateTokenInput): Promise<Token> {
     return this.prisma.token.update({
       where: { id },
       data: {
@@ -75,7 +75,7 @@ export class TokenService {
     });
   }
 
-  async softDelete(id: string): Promise<Token> {
+  async softDelete(id: number): Promise<Token> {
     return this.prisma.token.update({
       where: { id },
       data: {

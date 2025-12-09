@@ -11,10 +11,13 @@ export interface PaymentHistoryItem {
   merchant: string;
   token: string;
   tokenSymbol: string;
+  decimals: number;
   amount: string;
   timestamp: string;
   transactionHash: string;
   status: string;
+  isGasless: boolean;
+  relayId?: string;
 }
 
 // PaymentCompleted 이벤트 ABI
@@ -524,8 +527,9 @@ export class BlockchainService {
         logs.map(async (log) => {
           const block = await client.getBlock({ blockHash: log.blockHash! });
           const tokenAddress = (log.args as any).token || '';
-          // 온체인에서 토큰 심볼 조회
+          // 온체인에서 토큰 심볼과 decimals 조회
           const tokenSymbol = tokenAddress ? await this.getTokenSymbolOnChain(chainId, tokenAddress) : 'UNKNOWN';
+          const decimals = tokenAddress ? await this.getDecimals(chainId, tokenAddress) : 18;
 
           return {
             paymentId: (log.args as any).paymentId || '',
@@ -533,10 +537,13 @@ export class BlockchainService {
             merchant: (log.args as any).merchant || '',
             token: tokenAddress,
             tokenSymbol,
+            decimals,
             amount: ((log.args as any).amount || BigInt(0)).toString(),
             timestamp: block.timestamp.toString(),
             transactionHash: log.transactionHash,
             status: 'completed',
+            isGasless: false, // 기본값, history route에서 DB 조회 후 업데이트
+            relayId: undefined,
           };
         })
       );

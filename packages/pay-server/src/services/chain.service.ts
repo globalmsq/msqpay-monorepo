@@ -30,7 +30,7 @@ export class ChainService {
     });
   }
 
-  async findById(id: string): Promise<Chain | null> {
+  async findById(id: number): Promise<Chain | null> {
     return this.prisma.chain.findFirst({
       where: {
         id,
@@ -63,7 +63,7 @@ export class ChainService {
     });
   }
 
-  async update(id: string, input: UpdateChainInput): Promise<Chain> {
+  async update(id: number, input: UpdateChainInput): Promise<Chain> {
     return this.prisma.chain.update({
       where: { id },
       data: {
@@ -75,7 +75,7 @@ export class ChainService {
     });
   }
 
-  async softDelete(id: string): Promise<Chain> {
+  async softDelete(id: number): Promise<Chain> {
     return this.prisma.chain.update({
       where: { id },
       data: {

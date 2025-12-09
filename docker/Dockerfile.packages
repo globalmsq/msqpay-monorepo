@@ -39,6 +39,10 @@ COPY contracts ./contracts
 
 WORKDIR /app/contracts
 
+# Pre-download solidity compiler and compile contracts
+# This caches the compiler and artifacts in the image
+RUN npx hardhat compile
+
 # Expose Hardhat node port
 EXPOSE 8545
 
@@ -46,43 +50,23 @@ EXPOSE 8545
 CMD ["npx", "hardhat", "node", "--hostname", "0.0.0.0"]
 
 # ============================================
-# Server Builder Stage
+# Server Stage (tsx로 소스 직접 실행)
 # ============================================
-FROM deps AS server-builder
+FROM deps AS server
 
 # Copy server source
 COPY packages/pay-server ./packages/pay-server
 
 WORKDIR /app/packages/pay-server
 
-# Build server
-RUN pnpm build
-
-# ============================================
-# Server Runtime Stage
-# ============================================
-FROM base AS server
-
-# Copy dependencies from deps stage
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/packages/pay-server/node_modules ./packages/pay-server/node_modules
-
-# Copy built server
-COPY --from=server-builder /app/packages/pay-server/dist ./packages/pay-server/dist
-COPY --from=server-builder /app/packages/pay-server/package.json ./packages/pay-server/
-
-# Copy chain configuration files
-COPY --from=server-builder /app/packages/pay-server/chains.json ./packages/pay-server/
-COPY --from=server-builder /app/packages/pay-server/chains.testnet.json ./packages/pay-server/
-COPY --from=server-builder /app/packages/pay-server/chains.production.json ./packages/pay-server/
-
-WORKDIR /app/packages/pay-server
+# Generate Prisma client
+RUN npx prisma generate
 
 # Expose server port
 EXPOSE 3001
 
-# Run server
-CMD ["node", "dist/index.js"]
+# Run server with tsx (pnpm start)
+CMD ["pnpm", "start"]
 
 # ============================================
 # SDK Builder Stage (for demo dependency)

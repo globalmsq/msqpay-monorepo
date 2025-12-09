@@ -21,7 +21,7 @@ export interface PaymentStatus {
   currency: 'USD' | 'EUR' | 'KRW';
   tokenAddress: string;
   recipientAddress: string;
-  status: 'pending' | 'confirmed' | 'failed' | 'completed';
+  status: 'pending' | 'confirmed' | 'failed' | 'completed' | 'CREATED' | 'PENDING' | 'CONFIRMED' | 'FAILED' | 'EXPIRED';
   transactionHash?: string;
   blockNumber?: number;
   createdAt: string;
@@ -43,10 +43,14 @@ export interface PaymentHistoryItem {
   payer: string;
   merchant: string;
   token: string;
+  tokenSymbol: string;
+  decimals: number;
   amount: string;
   timestamp: string;
   transactionHash: string;
   status: string;
+  isGasless: boolean;
+  relayId?: string;
 }
 
 /**

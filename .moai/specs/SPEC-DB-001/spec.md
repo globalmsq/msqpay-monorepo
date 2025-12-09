@@ -7,9 +7,9 @@
 | ID | SPEC-DB-001 |
 | 제목 | Pay-Server 데이터베이스 통합 (Prisma + MySQL + Redis) |
 | 우선순위 | HIGH |
-| 상태 | Draft |
+| 상태 | Implemented |
 | 생성일 | 2025-12-03 |
-| 수정일 | 2025-12-04 |
+| 수정일 | 2025-12-09 |
 | 도메인 | Backend / Infrastructure |
 
 ---
@@ -249,7 +249,10 @@ const DEFAULT_CHAIN_ID = 31337;
 - order_id: VARCHAR(255) NOT NULL
 - amount: DECIMAL(78,0) NOT NULL (wei 단위)
 - decimals: INT NOT NULL (결제 시점 토큰 decimals 스냅샷)
-- status: ENUM('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED') DEFAULT 'PENDING'
+- status: ENUM('CREATED', 'PENDING', 'CONFIRMED', 'FAILED', 'EXPIRED') DEFAULT 'CREATED'
+- tx_hash: VARCHAR(66) NULL (트랜잭션 해시)
+- expires_at: DATETIME NOT NULL (만료 시간)
+- confirmed_at: DATETIME NULL (확인 시간)
 - created_at: DATETIME DEFAULT NOW
 - updated_at: DATETIME ON UPDATE NOW
 - INDEX(payment_method_id)
@@ -260,9 +263,13 @@ const DEFAULT_CHAIN_ID = 31337;
 - id: INT AUTO_INCREMENT PRIMARY KEY
 - relay_ref: VARCHAR(255) UNIQUE NOT NULL (Defender/Simple-Defender 요청 ID)
 - payment_id: INT NOT NULL (→ payments.id 논리적 참조)
-- forwarder_address: VARCHAR(42) NOT NULL
+- status: ENUM('QUEUED', 'SUBMITTED', 'CONFIRMED', 'FAILED') DEFAULT 'QUEUED'
+- gas_estimate: DECIMAL(65,0) NULL (예상 가스)
+- gas_used: DECIMAL(65,0) NULL (사용된 가스)
 - tx_hash: VARCHAR(66) NULL
-- status: ENUM('SUBMITTED', 'PENDING', 'CONFIRMED', 'FAILED') DEFAULT 'SUBMITTED'
+- error_message: TEXT NULL
+- submitted_at: DATETIME NULL
+- confirmed_at: DATETIME NULL
 - created_at: DATETIME DEFAULT NOW
 - updated_at: DATETIME ON UPDATE NOW
 - INDEX(payment_id)
@@ -271,10 +278,12 @@ const DEFAULT_CHAIN_ID = 31337;
 
 - id: INT AUTO_INCREMENT PRIMARY KEY
 - payment_id: INT NOT NULL (→ payments.id 논리적 참조)
-- event_type: ENUM('CREATED', 'SUBMITTED', 'CONFIRMED', 'FAILED')
-- event_data: JSON NULL
+- event_type: ENUM('CREATED', 'STATUS_CHANGED', 'RELAY_SUBMITTED', 'RELAY_CONFIRMED', 'EXPIRED')
+- old_status: VARCHAR(50) NULL
+- new_status: VARCHAR(50) NULL
+- metadata: JSON NULL
 - created_at: DATETIME DEFAULT NOW
-- INDEX(payment_id, created_at)
+- INDEX(payment_id)
 
 ### 3.3 인덱스 전략
 

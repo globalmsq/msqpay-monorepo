@@ -73,28 +73,32 @@ export default function Home() {
           </ul>
         </div>
 
-        {/* Products grid */}
-        <section className="mb-12">
-          <h2 className="text-2xl font-semibold mb-6">Products</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {PRODUCTS.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                disabled={!isConnected}
-                onPaymentSuccess={handlePaymentSuccess}
-              />
-            ))}
-          </div>
-        </section>
-
-        {/* Payment history */}
-        {isConnected && (
-          <section>
-            <h2 className="text-2xl font-semibold mb-6">Your Payment History</h2>
-            <PaymentHistory ref={paymentHistoryRef} />
+        {/* Main content: Products and Payment History side by side on large screens */}
+        <div className="flex flex-col lg:flex-row gap-8">
+          {/* Products grid */}
+          <section className={`${isConnected ? 'lg:w-2/3' : 'w-full'}`}>
+            <h2 className="text-2xl font-semibold mb-6">Products</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {PRODUCTS.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  tokenSymbol={tokenSymbol}
+                  disabled={!isConnected}
+                  onPaymentSuccess={handlePaymentSuccess}
+                />
+              ))}
+            </div>
           </section>
-        )}
+
+          {/* Payment history */}
+          {isConnected && (
+            <section className="lg:w-1/3">
+              <h2 className="text-2xl font-semibold mb-6">Your Payment History</h2>
+              <PaymentHistory ref={paymentHistoryRef} />
+            </section>
+          )}
+        </div>
 
         {/* Not connected message */}
         {!isConnected && (

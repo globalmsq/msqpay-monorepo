@@ -1,8 +1,8 @@
 import { PrismaClient, MerchantPaymentMethod } from '@prisma/client';
 
 export interface CreatePaymentMethodInput {
-  merchant_id: string;
-  token_id: string;
+  merchant_id: number;
+  token_id: number;
   recipient_address: string;
 }
 
@@ -26,7 +26,7 @@ export class PaymentMethodService {
     });
   }
 
-  async findById(id: string): Promise<MerchantPaymentMethod | null> {
+  async findById(id: number): Promise<MerchantPaymentMethod | null> {
     return this.prisma.merchantPaymentMethod.findFirst({
       where: {
         id,
@@ -35,7 +35,7 @@ export class PaymentMethodService {
     });
   }
 
-  async findByMerchantAndToken(merchantId: string, tokenId: string): Promise<MerchantPaymentMethod | null> {
+  async findByMerchantAndToken(merchantId: number, tokenId: number): Promise<MerchantPaymentMethod | null> {
     return this.prisma.merchantPaymentMethod.findFirst({
       where: {
         merchant_id: merchantId,
@@ -45,7 +45,7 @@ export class PaymentMethodService {
     });
   }
 
-  async findAllForMerchant(merchantId: string, includeDisabled: boolean = false): Promise<MerchantPaymentMethod[]> {
+  async findAllForMerchant(merchantId: number, includeDisabled: boolean = false): Promise<MerchantPaymentMethod[]> {
     const whereClause: any = {
       merchant_id: merchantId,
       is_deleted: false,
@@ -61,7 +61,7 @@ export class PaymentMethodService {
     });
   }
 
-  async update(id: string, input: UpdatePaymentMethodInput): Promise<MerchantPaymentMethod> {
+  async update(id: number, input: UpdatePaymentMethodInput): Promise<MerchantPaymentMethod> {
     return this.prisma.merchantPaymentMethod.update({
       where: { id },
       data: {
@@ -73,7 +73,7 @@ export class PaymentMethodService {
     });
   }
 
-  async softDelete(id: string): Promise<MerchantPaymentMethod> {
+  async softDelete(id: number): Promise<MerchantPaymentMethod> {
     return this.prisma.merchantPaymentMethod.update({
       where: { id },
       data: {

@@ -1,11 +1,59 @@
 "use client";
 
-import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
+import { useState, useEffect, forwardRef, useImperativeHandle, useCallback } from "react";
 import { useAccount, useChainId } from "wagmi";
 import { formatUnits } from "viem";
-import { DEFAULT_TOKEN_SYMBOL } from "@/lib/constants";
 import { getPaymentHistory, PaymentHistoryItem } from "@/lib/api";
-import { truncateAddress, truncateHash, formatTimestamp } from "@/lib/utils";
+import { formatTimestamp } from "@/lib/utils";
+
+// Inline CopyButton component
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  }, [text]);
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="ml-1 p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors inline-flex flex-shrink-0"
+      title={copied ? "Copied!" : "Copy to clipboard"}
+    >
+      {copied ? (
+        <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+      ) : (
+        <svg className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
+// Address display with copy button - shows more characters
+function AddressWithCopy({ address, label }: { address: string; label: string }) {
+  // Show first 10 and last 8 characters for better readability
+  const displayAddress = `${address.slice(0, 10)}...${address.slice(-8)}`;
+
+  return (
+    <div className="flex items-center justify-between text-xs">
+      <span className="text-gray-500 dark:text-gray-400 mr-2">{label}</span>
+      <span className="flex items-center font-mono text-gray-700 dark:text-gray-300">
+        {displayAddress}
+        <CopyButton text={address} />
+      </span>
+    </div>
+  );
+}
 
 // Ref type for parent component
 export interface PaymentHistoryRef {
@@ -18,8 +66,6 @@ export const PaymentHistory = forwardRef<PaymentHistoryRef>(function PaymentHist
   const [payments, setPayments] = useState<PaymentHistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const tokenSymbol = DEFAULT_TOKEN_SYMBOL[chainId] || "TOKEN";
 
   // Fetch payments from Payment API
   const fetchPayments = async () => {
@@ -93,41 +139,53 @@ export const PaymentHistory = forwardRef<PaymentHistoryRef>(function PaymentHist
         )}
 
         {payments.length > 0 && (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {payments.map((payment) => (
               <div
-                key={payment.id}
-                className="border border-gray-200 dark:border-gray-700 rounded-lg p-3"
+                key={payment.paymentId}
+                className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:border-primary-300 dark:hover:border-primary-700 transition-colors"
               >
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <span className="font-semibold">
-                      {formatUnits(BigInt(payment.amount), 18)} {tokenSymbol}
-                    </span>
-                  </div>
-                  <span className="text-xs text-gray-500">
+                {/* Header: Badge + Timestamp */}
+                <div className="flex justify-between items-center mb-3">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                    payment.isGasless
+                      ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
+                      : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+                  }`}>
+                    {payment.isGasless ? "Gasless" : "Direct"}
+                  </span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
                     {formatTimestamp(payment.timestamp)}
                   </span>
                 </div>
-                <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                  <div>To: {truncateAddress(payment.merchant)}</div>
-                  <div className="text-xs">
-                    Payment ID: {truncateHash(payment.paymentId)}
-                  </div>
+
+                {/* Amount */}
+                <div className="mb-3">
+                  <span className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                    {formatUnits(BigInt(payment.amount), payment.decimals || 18)} {payment.tokenSymbol || "TOKEN"}
+                  </span>
                 </div>
-                {getExplorerUrl(payment.transactionHash) ? (
+
+                {/* Details */}
+                <div className="space-y-2 mb-3">
+                  <AddressWithCopy address={payment.merchant} label="To" />
+                  <AddressWithCopy address={payment.paymentId} label="Payment ID" />
+                  <AddressWithCopy address={payment.transactionHash} label="TX Hash" />
+                  {payment.isGasless && payment.relayId && (
+                    <AddressWithCopy address={payment.relayId} label="Relay ID" />
+                  )}
+                </div>
+
+                {/* Explorer link */}
+                {getExplorerUrl(payment.transactionHash) && (
                   <a
                     href={getExplorerUrl(payment.transactionHash)!}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-xs text-primary-600 hover:underline"
                   >
-                    View Transaction →
+                    View on Explorer →
                   </a>
-                ) : (
-                  <span className="text-xs text-gray-400">
-                    Tx: {truncateAddress(payment.transactionHash)}
-                  </span>
                 )}
               </div>
             ))}

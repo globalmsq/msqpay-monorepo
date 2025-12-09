@@ -36,7 +36,7 @@ export class MerchantService {
     });
   }
 
-  async findById(id: string): Promise<Merchant | null> {
+  async findById(id: number): Promise<Merchant | null> {
     return this.prisma.merchant.findFirst({
       where: {
         id,
@@ -69,7 +69,7 @@ export class MerchantService {
     });
   }
 
-  async update(id: string, input: UpdateMerchantInput): Promise<Merchant> {
+  async update(id: number, input: UpdateMerchantInput): Promise<Merchant> {
     return this.prisma.merchant.update({
       where: { id },
       data: {
@@ -80,7 +80,7 @@ export class MerchantService {
     });
   }
 
-  async verifyApiKey(merchantId: string, apiKey: string): Promise<boolean> {
+  async verifyApiKey(merchantId: number, apiKey: string): Promise<boolean> {
     const merchant = await this.prisma.merchant.findUnique({
       where: { id: merchantId },
     });
@@ -93,7 +93,7 @@ export class MerchantService {
     return merchant.api_key_hash === apiKeyHash;
   }
 
-  async softDelete(id: string): Promise<Merchant> {
+  async softDelete(id: number): Promise<Merchant> {
     return this.prisma.merchant.update({
       where: { id },
       data: {

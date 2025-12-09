@@ -1,21 +1,32 @@
-import Redis from 'ioredis';
+import Redis, { RedisOptions } from 'ioredis';
 
 let redisInstance: Redis | null = null;
 let redisAvailable = false;
 
 function createRedisClient(): Redis {
-  const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-  const client = new Redis(redisUrl, {
-    retryStrategy: (times) => {
+  // REDIS_URL 우선, 없으면 REDIS_HOST/REDIS_PORT 개별 사용
+  const redisUrl = process.env.REDIS_URL;
+
+  const options: RedisOptions = {
+    retryStrategy: (times: number) => {
       const delay = Math.min(times * 50, 2000);
       return delay;
     },
     maxRetriesPerRequest: 3,
     enableReadyCheck: true,
-  });
+  };
+
+  let client: Redis;
+  if (redisUrl) {
+    client = new Redis(redisUrl, options);
+  } else {
+    const host = process.env.REDIS_HOST || 'localhost';
+    const port = parseInt(process.env.REDIS_PORT || '6379', 10);
+    client = new Redis({ ...options, host, port });
+  }
 
   client.on('error', (err) => {
-    console.warn('Redis connection error:', err.message);
+    console.warn('Redis connection error:', err.message || err);
     redisAvailable = false;
   });
 

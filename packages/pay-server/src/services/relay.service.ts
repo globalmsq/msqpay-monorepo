@@ -3,7 +3,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 
 export interface CreateRelayInput {
   relay_ref: string;
-  payment_id: string;
+  payment_id: number;
   gas_estimate?: Decimal;
 }
 
@@ -21,7 +21,7 @@ export class RelayService {
     });
   }
 
-  async findById(id: string): Promise<RelayRequest | null> {
+  async findById(id: number): Promise<RelayRequest | null> {
     return this.prisma.relayRequest.findUnique({
       where: { id },
     });
@@ -33,7 +33,7 @@ export class RelayService {
     });
   }
 
-  async findByPaymentId(paymentId: string): Promise<RelayRequest[]> {
+  async findByPaymentId(paymentId: number): Promise<RelayRequest[]> {
     return this.prisma.relayRequest.findMany({
       where: { payment_id: paymentId },
       orderBy: { created_at: 'desc' },
@@ -48,7 +48,7 @@ export class RelayService {
     });
   }
 
-  async updateStatus(id: string, newStatus: RelayStatus): Promise<RelayRequest> {
+  async updateStatus(id: number, newStatus: RelayStatus): Promise<RelayRequest> {
     return this.prisma.relayRequest.update({
       where: { id },
       data: {
@@ -59,21 +59,21 @@ export class RelayService {
     });
   }
 
-  async setTxHash(id: string, txHash: string): Promise<RelayRequest> {
+  async setTxHash(id: number, txHash: string): Promise<RelayRequest> {
     return this.prisma.relayRequest.update({
       where: { id },
       data: { tx_hash: txHash },
     });
   }
 
-  async setGasUsed(id: string, gasUsed: Decimal): Promise<RelayRequest> {
+  async setGasUsed(id: number, gasUsed: Decimal): Promise<RelayRequest> {
     return this.prisma.relayRequest.update({
       where: { id },
       data: { gas_used: gasUsed },
     });
   }
 
-  async setErrorMessage(id: string, errorMessage: string): Promise<RelayRequest> {
+  async setErrorMessage(id: number, errorMessage: string): Promise<RelayRequest> {
     return this.prisma.relayRequest.update({
       where: { id },
       data: { error_message: errorMessage },

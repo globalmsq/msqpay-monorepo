@@ -34,7 +34,7 @@ enum EventType {
 }
 
 model Chain {
-  id         String   @id @default(cuid())
+  id         Int      @id @default(autoincrement())
   network_id Int      @unique  // EIP-155 chain ID
   name       String
   rpc_url    String
@@ -49,8 +49,8 @@ model Chain {
 }
 
 model Token {
-  id              String   @id @default(cuid())
-  chain_id        String   // logical reference to chains.id
+  id              Int      @id @default(autoincrement())
+  chain_id        Int      // logical reference to chains.id
   address         String
   symbol          String
   decimals        Int
@@ -65,7 +65,7 @@ model Token {
 }
 
 model Merchant {
-  id              String   @id @default(cuid())
+  id              Int      @id @default(autoincrement())
   merchant_key    String   @unique
   name            String
   api_key_hash    String   // SHA-256 hash
@@ -80,9 +80,9 @@ model Merchant {
 }
 
 model MerchantPaymentMethod {
-  id                String   @id @default(cuid())
-  merchant_id       String   // logical reference
-  token_id          String   // logical reference
+  id                Int      @id @default(autoincrement())
+  merchant_id       Int      // logical reference
+  token_id          Int      // logical reference
   recipient_address String
   is_enabled        Boolean  @default(true)
   is_deleted        Boolean  @default(false)
@@ -95,10 +95,10 @@ model MerchantPaymentMethod {
 }
 
 model Payment {
-  id                    String        @id @default(cuid())
+  id                    Int           @id @default(autoincrement())
   payment_hash          String        @unique @db.VarChar(66)  // bytes32
-  merchant_id           String
-  payment_method_id     String
+  merchant_id           Int
+  payment_method_id     Int
   amount                Decimal       @db.Decimal(65, 0)  // wei (max uint256)
   token_decimals        Int           // snapshot
   token_symbol          String        // snapshot
@@ -116,9 +116,9 @@ model Payment {
 }
 
 model RelayRequest {
-  id              String      @id @default(cuid())
+  id              Int         @id @default(autoincrement())
   relay_ref       String      @unique
-  payment_id      String
+  payment_id      Int
   status          RelayStatus @default(QUEUED)
   gas_estimate    Decimal?    @db.Decimal(65, 0)
   gas_used        Decimal?    @db.Decimal(65, 0)
@@ -134,8 +134,8 @@ model RelayRequest {
 }
 
 model PaymentEvent {
-  id          String    @id @default(cuid())
-  payment_id  String
+  id          Int       @id @default(autoincrement())
+  payment_id  Int
   event_type  EventType
   old_status  String?
   new_status  String?

@@ -91,6 +91,39 @@ type PaymentStatus =
 
 type GasMode = "direct" | "gasless";
 
+// Inline CopyButton component
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="ml-1 p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+      title={copied ? "Copied!" : "Copy to clipboard"}
+    >
+      {copied ? (
+        <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+      ) : (
+        <svg className="w-3.5 h-3.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 export function PaymentModal({
   product,
   onClose,
@@ -218,10 +251,10 @@ export function PaymentModal({
       const response = await getPaymentStatus(paymentId);
 
       if (response.success && response.data) {
-        if (response.data.status === 'completed' || response.data.status === 'confirmed') {
+        if (response.data.status === 'CONFIRMED' || response.data.status === 'completed') {
           return;
         }
-        if (response.data.status === 'failed') {
+        if (response.data.status === 'FAILED' || response.data.status === 'failed') {
           throw new Error('Payment failed on server');
         }
       }
@@ -311,9 +344,7 @@ export function PaymentModal({
       if (onSuccess) {
         onSuccess(hash);
       }
-      setTimeout(() => {
-        onClose();
-      }, 1500);
+      // Don't auto-close - let user view details and close manually
     } catch (err: unknown) {
       console.error("Payment error:", err);
       const message = err instanceof Error ? err.message : "Payment failed";
@@ -437,10 +468,7 @@ export function PaymentModal({
       if (onSuccess && relayResult.transactionHash) {
         onSuccess(relayResult.transactionHash);
       }
-
-      setTimeout(() => {
-        onClose();
-      }, 1500);
+      // Don't auto-close - let user view details and close manually
     } catch (err: unknown) {
       console.error("Gasless payment error:", err);
       const message = err instanceof Error ? err.message : "Gasless payment failed";
@@ -519,36 +547,38 @@ export function PaymentModal({
             )}
           </div>
 
-          {/* Gas mode selector */}
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Payment Method
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => setGasMode("direct")}
-                className={`p-3 rounded-lg border-2 transition-colors ${
-                  gasMode === "direct"
-                    ? "border-primary-500 bg-primary-50 dark:bg-primary-900/20"
-                    : "border-gray-200 dark:border-gray-700"
-                }`}
-              >
-                <div className="font-medium text-sm">Direct</div>
-                <div className="text-xs text-gray-500">You pay gas</div>
-              </button>
-              <button
-                onClick={() => setGasMode("gasless")}
-                className={`p-3 rounded-lg border-2 transition-colors ${
-                  gasMode === "gasless"
-                    ? "border-primary-500 bg-primary-50 dark:bg-primary-900/20"
-                    : "border-gray-200 dark:border-gray-700"
-                }`}
-              >
-                <div className="font-medium text-sm">Gasless</div>
-                <div className="text-xs text-gray-500">Just sign</div>
-              </button>
+          {/* Gas mode selector - hide on success */}
+          {status !== "success" && (
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Payment Method
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setGasMode("direct")}
+                  className={`p-3 rounded-lg border-2 transition-colors ${
+                    gasMode === "direct"
+                      ? "border-primary-500 bg-primary-50 dark:bg-primary-900/20"
+                      : "border-gray-200 dark:border-gray-700"
+                  }`}
+                >
+                  <div className="font-medium text-sm">Direct</div>
+                  <div className="text-xs text-gray-500">You pay gas</div>
+                </button>
+                <button
+                  onClick={() => setGasMode("gasless")}
+                  className={`p-3 rounded-lg border-2 transition-colors ${
+                    gasMode === "gasless"
+                      ? "border-primary-500 bg-primary-50 dark:bg-primary-900/20"
+                      : "border-gray-200 dark:border-gray-700"
+                  }`}
+                >
+                  <div className="font-medium text-sm">Gasless</div>
+                  <div className="text-xs text-gray-500">Just sign</div>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Error message */}
           {(error || configError) && (
@@ -557,20 +587,111 @@ export function PaymentModal({
             </div>
           )}
 
-          {/* Success message */}
-          {status === "success" && pendingTxHash && (
-            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
-              <p className="text-sm text-green-700 dark:text-green-300 font-medium">
-                Payment successful!
-              </p>
-              <a
-                href={`https://amoy.polygonscan.com/tx/${pendingTxHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-primary-600 hover:underline"
-              >
-                View on PolygonScan →
-              </a>
+          {/* Success message with payment details */}
+          {status === "success" && (
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <p className="text-sm text-green-700 dark:text-green-300 font-semibold">
+                  Payment Successful!
+                </p>
+              </div>
+
+              {/* Payment Details */}
+              <div className="space-y-2 text-xs">
+                {/* Payment Type Badge */}
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600 dark:text-gray-400">Payment Type:</span>
+                  <span className={`px-2 py-0.5 rounded-full font-medium ${
+                    gasMode === "gasless"
+                      ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
+                      : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+                  }`}>
+                    {gasMode === "gasless" ? "Gasless (Meta-TX)" : "Direct"}
+                  </span>
+                </div>
+
+                {/* Amount */}
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Amount:</span>
+                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                    {serverConfig?.totalAmount} {tokenSymbol}
+                  </span>
+                </div>
+
+                {/* Payment ID */}
+                {currentPaymentId && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 dark:text-gray-400">Payment ID:</span>
+                    <span className="flex items-center">
+                      <span className="font-mono text-gray-900 dark:text-gray-100" title={currentPaymentId}>
+                        {currentPaymentId.slice(0, 10)}...{currentPaymentId.slice(-8)}
+                      </span>
+                      <CopyButton text={currentPaymentId} />
+                    </span>
+                  </div>
+                )}
+
+                {/* Transaction Hash */}
+                {pendingTxHash && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 dark:text-gray-400">TX Hash:</span>
+                    <span className="flex items-center">
+                      <span className="font-mono text-gray-900 dark:text-gray-100" title={pendingTxHash}>
+                        {pendingTxHash.slice(0, 10)}...{pendingTxHash.slice(-8)}
+                      </span>
+                      <CopyButton text={pendingTxHash} />
+                    </span>
+                  </div>
+                )}
+
+                {/* Relay Request ID (Gasless only) */}
+                {gasMode === "gasless" && relayRequestId && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 dark:text-gray-400">Relay ID:</span>
+                    <span className="flex items-center">
+                      <span className="font-mono text-gray-900 dark:text-gray-100" title={relayRequestId}>
+                        {relayRequestId.slice(0, 10)}...{relayRequestId.slice(-8)}
+                      </span>
+                      <CopyButton text={relayRequestId} />
+                    </span>
+                  </div>
+                )}
+
+                {/* Gas Info */}
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Gas Paid By:</span>
+                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                    {gasMode === "gasless" ? "Relayer (Free for you)" : "You"}
+                  </span>
+                </div>
+
+                {/* Chain Info */}
+                {serverConfig?.chainId && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Network:</span>
+                    <span className="font-medium text-gray-900 dark:text-gray-100">
+                      Chain ID: {serverConfig.chainId}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* View on Explorer Link */}
+              {pendingTxHash && (
+                <a
+                  href={serverConfig?.chainId === 31337
+                    ? `#`
+                    : `https://amoy.polygonscan.com/tx/${pendingTxHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block text-center text-xs text-primary-600 hover:underline pt-2 border-t border-green-200 dark:border-green-800"
+                >
+                  {serverConfig?.chainId === 31337 ? "Local Network (No Explorer)" : "View on Explorer →"}
+                </a>
+              )}
             </div>
           )}
 

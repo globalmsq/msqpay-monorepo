@@ -6,6 +6,11 @@ import { loadChainsConfig } from './config/chains.config';
 import { BlockchainService } from './services/blockchain.service';
 import { DefenderService } from './services/defender.service';
 import { PaymentService } from './services/payment.service';
+import { MerchantService } from './services/merchant.service';
+import { ChainService } from './services/chain.service';
+import { TokenService } from './services/token.service';
+import { PaymentMethodService } from './services/payment-method.service';
+import { RelayService } from './services/relay.service';
 import { getPrismaClient, disconnectPrisma } from './db/client';
 import { getRedisClient, disconnectRedis } from './db/redis';
 import { createPaymentRoute } from './routes/payments/create';
@@ -53,8 +58,13 @@ const defenderApiSecret = process.env.DEFENDER_API_SECRET || '';
 const relayerAddress = process.env.RELAYER_ADDRESS || '0x0000000000000000000000000000000000000000';
 const defenderService = new DefenderService(defenderApiUrl, defenderApiKey, defenderApiSecret, relayerAddress);
 
-// Initialize PaymentService
+// Initialize database services
 const paymentService = new PaymentService(prisma);
+const merchantService = new MerchantService(prisma);
+const chainService = new ChainService(prisma);
+const tokenService = new TokenService(prisma);
+const paymentMethodService = new PaymentMethodService(prisma);
+const relayService = new RelayService(prisma);
 
 // Register CORS
 server.register(cors, {
@@ -78,12 +88,20 @@ server.get('/', async (_request, _reply) => {
 
 // Register routes
 const registerRoutes = async () => {
-  await createPaymentRoute(server, blockchainService);
+  await createPaymentRoute(
+    server,
+    blockchainService,
+    merchantService,
+    chainService,
+    tokenService,
+    paymentMethodService,
+    paymentService
+  );
   await getPaymentStatusRoute(server, blockchainService, paymentService);
-  await submitGaslessRoute(server, defenderService);
+  await submitGaslessRoute(server, defenderService, relayService, paymentService);
   await executeRelayRoute(server, defenderService);
   await getRelayStatusRoute(server, defenderService);
-  await getPaymentHistoryRoute(server, blockchainService);
+  await getPaymentHistoryRoute(server, blockchainService, paymentService, relayService);
   await getTokenBalanceRoute(server, blockchainService);
   await getTokenAllowanceRoute(server, blockchainService);
   await getTransactionStatusRoute(server, blockchainService);

@@ -1,7 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { parseUnits, keccak256, toHex } from 'viem';
+import { Decimal } from '@prisma/client/runtime/library';
 import { CreatePaymentSchema } from '../../schemas/payment.schema';
 import { BlockchainService } from '../../services/blockchain.service';
+import { MerchantService } from '../../services/merchant.service';
+import { ChainService } from '../../services/chain.service';
+import { TokenService } from '../../services/token.service';
+import { PaymentMethodService } from '../../services/payment-method.service';
+import { PaymentService } from '../../services/payment.service';
 
 export interface CreatePaymentRequest {
   merchantId: string;
@@ -15,7 +21,12 @@ export interface CreatePaymentRequest {
 
 export async function createPaymentRoute(
   app: FastifyInstance,
-  blockchainService: BlockchainService
+  blockchainService: BlockchainService,
+  merchantService: MerchantService,
+  chainService: ChainService,
+  tokenService: TokenService,
+  paymentMethodService: PaymentMethodService,
+  paymentService: PaymentService
 ) {
   app.post<{ Body: CreatePaymentRequest }>('/payments/create', async (request, reply) => {
     try {
@@ -55,6 +66,56 @@ export async function createPaymentRoute(
         });
       }
 
+      // 4. DB에서 Merchant 조회 (merchant_key로)
+      const merchant = await merchantService.findByMerchantKey(validatedData.merchantId);
+      if (!merchant) {
+        return reply.code(404).send({
+          code: 'MERCHANT_NOT_FOUND',
+          message: 'Merchant not found',
+        });
+      }
+
+      if (!merchant.is_enabled) {
+        return reply.code(403).send({
+          code: 'MERCHANT_DISABLED',
+          message: 'Merchant is disabled',
+        });
+      }
+
+      // 5. DB에서 Chain 조회 (network_id로)
+      const chain = await chainService.findByNetworkId(validatedData.chainId);
+      if (!chain) {
+        return reply.code(404).send({
+          code: 'CHAIN_NOT_FOUND',
+          message: 'Chain not found in database',
+        });
+      }
+
+      // 6. DB에서 Token 조회 (chain.id + address로)
+      const token = await tokenService.findByAddress(chain.id, tokenAddress);
+      if (!token) {
+        return reply.code(404).send({
+          code: 'TOKEN_NOT_FOUND',
+          message: 'Token not found in database',
+        });
+      }
+
+      // 7. DB에서 MerchantPaymentMethod 조회
+      const paymentMethod = await paymentMethodService.findByMerchantAndToken(merchant.id, token.id);
+      if (!paymentMethod) {
+        return reply.code(404).send({
+          code: 'PAYMENT_METHOD_NOT_FOUND',
+          message: 'Payment method not configured for this merchant and token',
+        });
+      }
+
+      if (!paymentMethod.is_enabled) {
+        return reply.code(403).send({
+          code: 'PAYMENT_METHOD_DISABLED',
+          message: 'Payment method is disabled',
+        });
+      }
+
       // amount를 wei로 변환 (설정된 decimals 사용)
       const amountInWei = parseUnits(validatedData.amount.toString(), tokenConfig.decimals);
 
@@ -62,19 +123,32 @@ export async function createPaymentRoute(
       const contracts = blockchainService.getChainContracts(validatedData.chainId);
 
       // 결제 생성: merchantId + orderId + timestamp 기반 bytes32 해시 생성
-      const paymentId = keccak256(
+      const paymentHash = keccak256(
         toHex(`${validatedData.merchantId}:${validatedData.orderId}:${Date.now()}`)
       );
 
+      // 8. DB에 Payment 저장
+      const payment = await paymentService.create({
+        payment_hash: paymentHash,
+        merchant_id: merchant.id,
+        payment_method_id: paymentMethod.id,
+        amount: new Decimal(amountInWei.toString()),
+        token_decimals: token.decimals,
+        token_symbol: token.symbol,
+        network_id: chain.network_id,
+        expires_at: new Date(Date.now() + 30 * 60 * 1000), // 30분 후 만료
+      });
+
       return reply.code(201).send({
         success: true,
-        paymentId,
+        paymentId: paymentHash,
         chainId: validatedData.chainId,
         tokenAddress: tokenConfig.address,
         gatewayAddress: contracts?.gateway,
         forwarderAddress: contracts?.forwarder,
         amount: amountInWei.toString(),
-        status: 'pending',
+        status: payment.status.toLowerCase(),
+        expiresAt: payment.expires_at.toISOString(),
       });
     } catch (error) {
       if (error instanceof Error && error.name === 'ZodError') {

@@ -58,7 +58,8 @@ services:
       NODE_ENV: development
       HOST: 0.0.0.0
       PORT: 3001
-      # Hardhat private key #2 (deterministic - for local dev only)
+      # Hardhat private key #2 (Account #2, deterministic - for local dev only)
+      # Address: 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
       RELAYER_PRIVATE_KEY: "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
       RPC_URL: http://hardhat:8545
       CHAIN_ID: 31337
@@ -97,7 +98,8 @@ services:
       # Simple Defender API URL (Local gasless relay)
       # Production: https://api.defender.openzeppelin.com
       DEFENDER_API_URL: http://simple-defender:3001
-      RELAYER_ADDRESS: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+      # Relayer address (Hardhat Account #2)
+      RELAYER_ADDRESS: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
       # Contract addresses (Hardhat deterministic)
       FORWARDER_ADDRESS: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
       GATEWAY_ADDRESS: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"

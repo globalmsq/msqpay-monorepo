@@ -42,7 +42,7 @@ export interface MerchantConfig {
  * - TEST 토큰 사용
  */
 const DEMO_MERCHANT_CONFIG: MerchantConfig = {
-  merchantId: 'demo-merchant',
+  merchantId: 'merchant_demo_001',
   recipientAddress: DEMO_MERCHANT_ADDRESS,
   chainId: 31337,
   tokenSymbol: 'TEST',

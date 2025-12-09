@@ -23,8 +23,8 @@ const config: HardhatUserConfig = {
     hardhat: {
       chainId: 31337,
       mining: {
-        auto: false,
-        interval: 2000, // 2초마다 블록 생성
+        auto: true,
+        // interval: 1000, // 1초마다 블록 생성
       },
     },
     localhost: {
