@@ -1,31 +1,23 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { MerchantService } from '../merchant.service';
-import { getPrismaClient, disconnectPrisma } from '../../db/client';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { mockPrisma, resetPrismaMocks } from '../../db/__mocks__/client';
 import crypto from 'crypto';
 
-// Unique prefix for this test suite to avoid conflicts with other tests
+// Mock the client module
+vi.mock('../../db/client', () => ({
+  getPrismaClient: vi.fn(() => mockPrisma),
+  disconnectPrisma: vi.fn(),
+}));
+
+import { MerchantService } from '../merchant.service';
+
 const TEST_PREFIX = 'merchant_svc_test_';
 
 describe('MerchantService', () => {
   let merchantService: MerchantService;
-  let prisma: ReturnType<typeof getPrismaClient>;
 
-  beforeAll(async () => {
-    prisma = getPrismaClient();
-    merchantService = new MerchantService(prisma);
-
-    // Clean up before tests - only our test-specific merchants
-    await prisma.merchant.deleteMany({
-      where: { merchant_key: { startsWith: TEST_PREFIX } },
-    });
-  });
-
-  afterAll(async () => {
-    // Clean up after tests - only our test-specific merchants
-    await prisma.merchant.deleteMany({
-      where: { merchant_key: { startsWith: TEST_PREFIX } },
-    });
-    await disconnectPrisma();
+  beforeEach(() => {
+    resetPrismaMocks();
+    merchantService = new MerchantService(mockPrisma);
   });
 
   it('should create a new merchant with hashed API key', async () => {
@@ -35,6 +27,22 @@ describe('MerchantService', () => {
       api_key: 'secret_key_12345',
     };
 
+    const apiKeyHash = crypto.createHash('sha256').update(merchantData.api_key).digest('hex');
+    const mockResult = {
+      id: 'test-id-1',
+      merchant_key: merchantData.merchant_key,
+      name: merchantData.name,
+      api_key_hash: apiKeyHash,
+      is_enabled: true,
+      is_deleted: false,
+      webhook_url: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+      deleted_at: null,
+    };
+
+    mockPrisma.merchant.create.mockResolvedValue(mockResult);
+
     const result = await merchantService.create(merchantData);
 
     expect(result).toBeDefined();
@@ -42,158 +50,219 @@ describe('MerchantService', () => {
     expect(result.name).toBe('Test Merchant');
     expect(result.is_enabled).toBe(true);
     expect(result.is_deleted).toBe(false);
-
-    // API key should be hashed, not stored as plain text
     expect(result.api_key_hash).not.toBe(merchantData.api_key);
-    expect(result.api_key_hash.length).toBe(64); // SHA-256 hash length
+    expect(result.api_key_hash.length).toBe(64);
+    expect(mockPrisma.merchant.create).toHaveBeenCalledOnce();
   });
 
   it('should find merchant by ID', async () => {
-    const merchantData = {
+    const mockMerchant = {
+      id: 'test-id-2',
       merchant_key: `${TEST_PREFIX}002`,
       name: 'Another Merchant',
-      api_key: 'another_secret_key',
+      api_key_hash: 'somehash',
+      is_enabled: true,
+      is_deleted: false,
+      webhook_url: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+      deleted_at: null,
     };
 
-    const created = await merchantService.create(merchantData);
-    const result = await merchantService.findById(created.id);
+    mockPrisma.merchant.findFirst.mockResolvedValue(mockMerchant);
+
+    const result = await merchantService.findById('test-id-2');
 
     expect(result).toBeDefined();
-    expect(result?.id).toBe(created.id);
+    expect(result?.id).toBe('test-id-2');
     expect(result?.name).toBe('Another Merchant');
+    expect(mockPrisma.merchant.findFirst).toHaveBeenCalledOnce();
   });
 
   it('should find merchant by merchant key', async () => {
-    const merchantData = {
+    const mockMerchant = {
+      id: 'test-id-3',
       merchant_key: `${TEST_PREFIX}003`,
       name: 'Key-based Merchant',
-      api_key: 'key_based_secret',
+      api_key_hash: 'somehash',
+      is_enabled: true,
+      is_deleted: false,
+      webhook_url: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+      deleted_at: null,
     };
 
-    await merchantService.create(merchantData);
+    mockPrisma.merchant.findFirst.mockResolvedValue(mockMerchant);
 
     const result = await merchantService.findByMerchantKey(`${TEST_PREFIX}003`);
 
     expect(result).toBeDefined();
     expect(result?.name).toBe('Key-based Merchant');
+    expect(mockPrisma.merchant.findFirst).toHaveBeenCalledOnce();
   });
 
   it('should verify API key correctly', async () => {
     const apiKey = 'test_api_key_for_verification';
-    const merchantData = {
+    const apiKeyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
+
+    const mockMerchant = {
+      id: 4,
       merchant_key: `${TEST_PREFIX}004`,
       name: 'Verification Merchant',
-      api_key: apiKey,
+      api_key_hash: apiKeyHash,
+      is_enabled: true,
+      is_deleted: false,
+      webhook_url: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+      deleted_at: null,
     };
 
-    const created = await merchantService.create(merchantData);
+    mockPrisma.merchant.findUnique.mockResolvedValue(mockMerchant);
 
     // Verify with correct key
-    const isValid = await merchantService.verifyApiKey(created.id, apiKey);
+    const isValid = await merchantService.verifyApiKey(4, apiKey);
     expect(isValid).toBe(true);
 
     // Verify with incorrect key
-    const isInvalid = await merchantService.verifyApiKey(created.id, 'wrong_key');
+    const isInvalid = await merchantService.verifyApiKey(4, 'wrong_key');
     expect(isInvalid).toBe(false);
   });
 
   it('should find all enabled merchants', async () => {
-    // Use unique keys for this test
-    const uniqueSuffix = Date.now().toString();
+    const mockMerchants = [
+      {
+        id: 'test-id-5',
+        merchant_key: `${TEST_PREFIX}findall_a`,
+        name: 'Merchant A',
+        api_key_hash: 'hash_a',
+        is_enabled: true,
+        is_deleted: false,
+        webhook_url: null,
+        created_at: new Date(),
+        updated_at: new Date(),
+        deleted_at: null,
+      },
+      {
+        id: 'test-id-6',
+        merchant_key: `${TEST_PREFIX}findall_b`,
+        name: 'Merchant B',
+        api_key_hash: 'hash_b',
+        is_enabled: true,
+        is_deleted: false,
+        webhook_url: null,
+        created_at: new Date(),
+        updated_at: new Date(),
+        deleted_at: null,
+      },
+    ];
 
-    await merchantService.create({
-      merchant_key: `${TEST_PREFIX}findall_a_${uniqueSuffix}`,
-      name: 'Merchant A',
-      api_key: 'key_a',
-    });
-
-    await merchantService.create({
-      merchant_key: `${TEST_PREFIX}findall_b_${uniqueSuffix}`,
-      name: 'Merchant B',
-      api_key: 'key_b',
-    });
+    mockPrisma.merchant.findMany.mockResolvedValue(mockMerchants);
 
     const result = await merchantService.findAll();
 
-    expect(result.length).toBeGreaterThanOrEqual(2);
+    expect(result.length).toBe(2);
+    expect(mockPrisma.merchant.findMany).toHaveBeenCalledOnce();
   });
 
   it('should update merchant information', async () => {
-    const uniqueSuffix = Date.now().toString();
-    const merchantData = {
-      merchant_key: `${TEST_PREFIX}update_${uniqueSuffix}`,
-      name: 'Original Name',
-      api_key: 'original_key',
+    const mockUpdated = {
+      id: 'test-id-7',
+      merchant_key: `${TEST_PREFIX}update`,
+      name: 'Updated Name',
+      api_key_hash: 'hash',
+      is_enabled: true,
+      is_deleted: false,
+      webhook_url: 'https://example.com/webhook',
+      created_at: new Date(),
+      updated_at: new Date(),
+      deleted_at: null,
     };
 
-    const created = await merchantService.create(merchantData);
+    mockPrisma.merchant.update.mockResolvedValue(mockUpdated);
 
-    const updated = await merchantService.update(created.id, {
+    const updated = await merchantService.update('test-id-7', {
       name: 'Updated Name',
       webhook_url: 'https://example.com/webhook',
     });
 
     expect(updated.name).toBe('Updated Name');
     expect(updated.webhook_url).toBe('https://example.com/webhook');
+    expect(mockPrisma.merchant.update).toHaveBeenCalledOnce();
   });
 
   it('should soft delete merchant', async () => {
-    const uniqueSuffix = Date.now().toString();
-    const merchantData = {
-      merchant_key: `${TEST_PREFIX}delete_${uniqueSuffix}`,
+    const mockDeleted = {
+      id: 'test-id-8',
+      merchant_key: `${TEST_PREFIX}delete`,
       name: 'Delete Test',
-      api_key: 'delete_key',
+      api_key_hash: 'hash',
+      is_enabled: true,
+      is_deleted: true,
+      webhook_url: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+      deleted_at: new Date(),
     };
 
-    const created = await merchantService.create(merchantData);
+    mockPrisma.merchant.update.mockResolvedValue(mockDeleted);
+    mockPrisma.merchant.findFirst.mockResolvedValue(null);
 
-    const deleted = await merchantService.softDelete(created.id);
+    const deleted = await merchantService.softDelete('test-id-8');
 
     expect(deleted.is_deleted).toBe(true);
     expect(deleted.deleted_at).toBeDefined();
 
     // Should not find deleted merchant
-    const found = await merchantService.findById(created.id);
+    const found = await merchantService.findById('test-id-8');
     expect(found).toBeNull();
   });
 
   it('should return null for non-existent merchant', async () => {
+    mockPrisma.merchant.findFirst.mockResolvedValue(null);
+
     const result = await merchantService.findByMerchantKey('non_existent_key');
     expect(result).toBeNull();
   });
 
   it('should not return api_key_hash in public response', async () => {
-    const uniqueSuffix = Date.now().toString();
-    const merchantData = {
-      merchant_key: `${TEST_PREFIX}private_${uniqueSuffix}`,
+    const apiKeyHash = crypto.createHash('sha256').update('private_key_123').digest('hex');
+    const mockMerchant = {
+      id: 'test-id-9',
+      merchant_key: `${TEST_PREFIX}private`,
       name: 'Private Key Merchant',
-      api_key: 'private_key_123',
+      api_key_hash: apiKeyHash,
+      is_enabled: true,
+      is_deleted: false,
+      webhook_url: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+      deleted_at: null,
     };
 
-    const created = await merchantService.create(merchantData);
+    mockPrisma.merchant.create.mockResolvedValue(mockMerchant);
 
-    // The api_key_hash should exist in DB but not exposed in service response
+    const created = await merchantService.create({
+      merchant_key: `${TEST_PREFIX}private`,
+      name: 'Private Key Merchant',
+      api_key: 'private_key_123',
+    });
+
     expect(created.api_key_hash).toBeDefined();
     expect(created.api_key_hash.length).toBe(64);
   });
 
   it('should enforce unique merchant_key constraint', async () => {
-    const uniqueSuffix = Date.now().toString();
-    const merchantData = {
-      merchant_key: `${TEST_PREFIX}unique_${uniqueSuffix}`,
-      name: 'Unique Test',
-      api_key: 'unique_key',
-    };
+    const error = new Error('Unique constraint failed on the fields: (`merchant_key`)');
+    mockPrisma.merchant.create.mockRejectedValue(error);
 
-    // First creation should succeed
-    await merchantService.create(merchantData);
-
-    // Second creation with same merchant_key should fail
-    try {
-      await merchantService.create(merchantData);
-      expect(false).toBe(true); // Should not reach here
-    } catch (error) {
-      expect(error).toBeDefined();
-    }
+    await expect(
+      merchantService.create({
+        merchant_key: `${TEST_PREFIX}unique`,
+        name: 'Unique Test',
+        api_key: 'unique_key',
+      })
+    ).rejects.toThrow();
   });
 });

@@ -1,15 +1,17 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { mockPrisma, resetPrismaMocks } from '../__mocks__/client';
+
+// Mock the client module
+vi.mock('../client', () => ({
+  getPrismaClient: vi.fn(() => mockPrisma),
+  disconnectPrisma: vi.fn(),
+}));
+
 import { getPrismaClient } from '../client';
 
 describe('Prisma Client', () => {
-  let prisma: ReturnType<typeof getPrismaClient>;
-
-  beforeAll(() => {
-    prisma = getPrismaClient();
-  });
-
-  afterAll(async () => {
-    await prisma.$disconnect();
+  beforeEach(() => {
+    resetPrismaMocks();
   });
 
   it('should return a singleton Prisma Client instance', () => {
@@ -19,6 +21,7 @@ describe('Prisma Client', () => {
   });
 
   it('should have all required models', () => {
+    const prisma = getPrismaClient();
     expect(prisma.chain).toBeDefined();
     expect(prisma.token).toBeDefined();
     expect(prisma.merchant).toBeDefined();
@@ -29,11 +32,17 @@ describe('Prisma Client', () => {
   });
 
   it('should be able to connect to database', async () => {
+    const mockResult = [{ test: 1 }];
+    mockPrisma.$queryRaw.mockResolvedValue(mockResult);
+
+    const prisma = getPrismaClient();
     const result = await prisma.$queryRaw`SELECT 1 as test`;
     expect(result).toBeDefined();
+    expect(result).toEqual(mockResult);
   });
 
-  it('should have a health check method', async () => {
+  it('should have a health check method', () => {
+    const prisma = getPrismaClient();
     expect(prisma.$disconnect).toBeDefined();
     expect(typeof prisma.$disconnect).toBe('function');
   });

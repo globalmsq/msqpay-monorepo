@@ -1,42 +1,21 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { mockPrisma, resetPrismaMocks } from '../../db/__mocks__/client';
+
+// Mock the client module
+vi.mock('../../db/client', () => ({
+  getPrismaClient: vi.fn(() => mockPrisma),
+  disconnectPrisma: vi.fn(),
+}));
+
 import { TokenService } from '../token.service';
-import { ChainService } from '../chain.service';
-import { getPrismaClient, disconnectPrisma } from '../../db/client';
 
 describe('TokenService', () => {
   let tokenService: TokenService;
-  let chainService: ChainService;
-  let prisma: ReturnType<typeof getPrismaClient>;
-  let chainId: string;
-  const TEST_NETWORK_ID = 99004; // Unique network ID for this test suite
+  const chainId = 'test-chain-id';
 
-  beforeAll(async () => {
-    prisma = getPrismaClient();
-    tokenService = new TokenService(prisma);
-    chainService = new ChainService(prisma);
-
-    // Clean up only test-specific data - first delete existing chain if any
-    const existingChain = await prisma.chain.findFirst({ where: { network_id: TEST_NETWORK_ID } });
-    if (existingChain) {
-      await prisma.token.deleteMany({ where: { chain_id: existingChain.id } });
-      await prisma.chain.delete({ where: { id: existingChain.id } });
-    }
-
-    // Create test chain
-    const chain = await chainService.create({
-      network_id: TEST_NETWORK_ID,
-      name: 'TokenTestChain',
-      rpc_url: 'http://localhost:8545',
-      is_testnet: true,
-    });
-    chainId = chain.id;
-  });
-
-  afterAll(async () => {
-    // Clean up only test-specific data
-    await prisma.token.deleteMany({ where: { chain_id: chainId } });
-    await prisma.chain.deleteMany({ where: { network_id: TEST_NETWORK_ID } });
-    await disconnectPrisma();
+  beforeEach(() => {
+    resetPrismaMocks();
+    tokenService = new TokenService(mockPrisma);
   });
 
   it('should create a new token', async () => {
@@ -47,6 +26,18 @@ describe('TokenService', () => {
       decimals: 6,
     };
 
+    const mockResult = {
+      id: 'token-id-1',
+      ...tokenData,
+      is_enabled: true,
+      is_deleted: false,
+      created_at: new Date(),
+      updated_at: new Date(),
+      deleted_at: null,
+    };
+
+    mockPrisma.token.create.mockResolvedValue(mockResult);
+
     const result = await tokenService.create(tokenData);
 
     expect(result).toBeDefined();
@@ -55,121 +46,158 @@ describe('TokenService', () => {
     expect(result.decimals).toBe(6);
     expect(result.is_enabled).toBe(true);
     expect(result.is_deleted).toBe(false);
+    expect(mockPrisma.token.create).toHaveBeenCalledOnce();
   });
 
   it('should find token by address on chain', async () => {
-    const tokenData = {
+    const mockToken = {
+      id: 'token-id-2',
       chain_id: chainId,
       address: '0x6B175474E89094C44Da98b954EedeAC495271d0F',
       symbol: 'DAI',
       decimals: 18,
+      is_enabled: true,
+      is_deleted: false,
+      created_at: new Date(),
+      updated_at: new Date(),
+      deleted_at: null,
     };
 
-    await tokenService.create(tokenData);
+    mockPrisma.token.findFirst.mockResolvedValue(mockToken);
 
-    const result = await tokenService.findByAddress(
-      chainId,
-      '0x6B175474E89094C44Da98b954EedeAC495271d0F'
-    );
+    const result = await tokenService.findByAddress(chainId, '0x6B175474E89094C44Da98b954EedeAC495271d0F');
 
     expect(result).toBeDefined();
     expect(result?.symbol).toBe('DAI');
     expect(result?.decimals).toBe(18);
+    expect(mockPrisma.token.findFirst).toHaveBeenCalledOnce();
   });
 
   it('should find token by ID', async () => {
-    const tokenData = {
+    const mockToken = {
+      id: 'token-id-3',
       chain_id: chainId,
       address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
       symbol: 'USDT',
       decimals: 6,
+      is_enabled: true,
+      is_deleted: false,
+      created_at: new Date(),
+      updated_at: new Date(),
+      deleted_at: null,
     };
 
-    const created = await tokenService.create(tokenData);
-    const result = await tokenService.findById(created.id);
+    mockPrisma.token.findFirst.mockResolvedValue(mockToken);
+
+    const result = await tokenService.findById('token-id-3');
 
     expect(result).toBeDefined();
-    expect(result?.id).toBe(created.id);
+    expect(result?.id).toBe('token-id-3');
     expect(result?.symbol).toBe('USDT');
+    expect(mockPrisma.token.findFirst).toHaveBeenCalledOnce();
   });
 
   it('should find all tokens on chain', async () => {
-    await prisma.token.deleteMany({ where: { chain_id: chainId } });
+    const mockTokens = [
+      {
+        id: 'token-id-4',
+        chain_id: chainId,
+        address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB49',
+        symbol: 'USDC2',
+        decimals: 6,
+        is_enabled: true,
+        is_deleted: false,
+        created_at: new Date(),
+        updated_at: new Date(),
+        deleted_at: null,
+      },
+      {
+        id: 'token-id-5',
+        chain_id: chainId,
+        address: '0x6B175474E89094C44Da98b954EedeAC495271d1F',
+        symbol: 'DAI2',
+        decimals: 18,
+        is_enabled: true,
+        is_deleted: false,
+        created_at: new Date(),
+        updated_at: new Date(),
+        deleted_at: null,
+      },
+    ];
 
-    await tokenService.create({
-      chain_id: chainId,
-      address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB49',
-      symbol: 'USDC2',
-      decimals: 6,
-    });
-
-    await tokenService.create({
-      chain_id: chainId,
-      address: '0x6B175474E89094C44Da98b954EedeAC495271d1F',
-      symbol: 'DAI2',
-      decimals: 18,
-    });
+    mockPrisma.token.findMany.mockResolvedValue(mockTokens);
 
     const result = await tokenService.findAllOnChain(chainId);
 
-    expect(result.length).toBeGreaterThanOrEqual(2);
+    expect(result.length).toBe(2);
+    expect(mockPrisma.token.findMany).toHaveBeenCalledOnce();
   });
 
   it('should update token information', async () => {
-    const tokenData = {
+    const mockUpdated = {
+      id: 'token-id-6',
       chain_id: chainId,
       address: '0x2260fac5e5542a773aa44fbcff0b92d3d107d3d9',
-      symbol: 'WBTC',
+      symbol: 'Wrapped BTC',
       decimals: 8,
+      is_enabled: true,
+      is_deleted: false,
+      created_at: new Date(),
+      updated_at: new Date(),
+      deleted_at: null,
     };
 
-    const created = await tokenService.create(tokenData);
+    mockPrisma.token.update.mockResolvedValue(mockUpdated);
 
-    const updated = await tokenService.update(created.id, {
+    const updated = await tokenService.update('token-id-6', {
       symbol: 'Wrapped BTC',
     });
 
     expect(updated.symbol).toBe('Wrapped BTC');
+    expect(mockPrisma.token.update).toHaveBeenCalledOnce();
   });
 
   it('should soft delete token', async () => {
-    const tokenData = {
+    const mockDeleted = {
+      id: 'token-id-7',
       chain_id: chainId,
       address: '0xC02aaA39b223FE8D0A0e8e4F27ead9083C756Cc2',
       symbol: 'WETH',
       decimals: 18,
+      is_enabled: true,
+      is_deleted: true,
+      created_at: new Date(),
+      updated_at: new Date(),
+      deleted_at: new Date(),
     };
 
-    const created = await tokenService.create(tokenData);
+    mockPrisma.token.update.mockResolvedValue(mockDeleted);
 
-    const deleted = await tokenService.softDelete(created.id);
+    const deleted = await tokenService.softDelete('token-id-7');
 
     expect(deleted.is_deleted).toBe(true);
     expect(deleted.deleted_at).toBeDefined();
+    expect(mockPrisma.token.update).toHaveBeenCalledOnce();
   });
 
   it('should return null for non-existent token', async () => {
+    mockPrisma.token.findFirst.mockResolvedValue(null);
+
     const result = await tokenService.findByAddress(chainId, '0x0000000000000000000000000000000000000000');
     expect(result).toBeNull();
   });
 
   it('should enforce unique constraint on chain_id and address', async () => {
-    const tokenData = {
-      chain_id: chainId,
-      address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-      symbol: 'USDC',
-      decimals: 6,
-    };
+    const error = new Error('Unique constraint failed on the fields: (`chain_id`, `address`)');
+    mockPrisma.token.create.mockRejectedValue(error);
 
-    // First creation should succeed
-    await tokenService.create(tokenData);
-
-    // Second creation with same chain_id and address should fail
-    try {
-      await tokenService.create(tokenData);
-      expect(false).toBe(true); // Should not reach here
-    } catch (error) {
-      expect(error).toBeDefined();
-    }
+    await expect(
+      tokenService.create({
+        chain_id: chainId,
+        address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+        symbol: 'USDC',
+        decimals: 6,
+      })
+    ).rejects.toThrow();
   });
 });

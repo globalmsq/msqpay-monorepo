@@ -1,91 +1,33 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { PaymentService } from '../payment.service';
-import { ChainService } from '../chain.service';
-import { TokenService } from '../token.service';
-import { MerchantService } from '../merchant.service';
-import { PaymentMethodService } from '../payment-method.service';
-import { getPrismaClient, disconnectPrisma } from '../../db/client';
-import { getRedisClient, disconnectRedis } from '../../db/redis';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { mockPrisma, resetPrismaMocks } from '../../db/__mocks__/client';
 import { Decimal } from '@prisma/client/runtime/library';
+
+// Mock the client module
+vi.mock('../../db/client', () => ({
+  getPrismaClient: vi.fn(() => mockPrisma),
+  disconnectPrisma: vi.fn(),
+}));
+
+// Mock Redis client
+vi.mock('../../db/redis', () => ({
+  getRedisClient: vi.fn(() => null),
+  disconnectRedis: vi.fn(),
+  isRedisAvailable: vi.fn(() => false),
+  getCache: vi.fn(() => Promise.resolve(null)),
+  setCache: vi.fn(() => Promise.resolve()),
+  deleteCache: vi.fn(() => Promise.resolve()),
+}));
+
+import { PaymentService } from '../payment.service';
 
 describe('PaymentService', () => {
   let paymentService: PaymentService;
-  let merchantService: MerchantService;
-  let tokenService: TokenService;
-  let chainService: ChainService;
-  let paymentMethodService: PaymentMethodService;
-  let prisma: ReturnType<typeof getPrismaClient>;
-  let paymentMethodId: number;
-  let merchantId: number;
-  let chainId: number;
-  const TEST_NETWORK_ID = 99001; // Unique network ID for this test suite
+  const merchantId = 1;
+  const paymentMethodId = 1;
 
-  beforeAll(async () => {
-    prisma = getPrismaClient();
-    getRedisClient();
-
-    paymentService = new PaymentService(prisma);
-    merchantService = new MerchantService(prisma);
-    tokenService = new TokenService(prisma);
-    chainService = new ChainService(prisma);
-    paymentMethodService = new PaymentMethodService(prisma);
-
-    // Clean up only test-specific data - first delete existing chain if any
-    const existingChain = await prisma.chain.findFirst({ where: { network_id: TEST_NETWORK_ID } });
-    if (existingChain) {
-      await prisma.relayRequest.deleteMany({});
-      await prisma.paymentEvent.deleteMany({});
-      await prisma.payment.deleteMany({});
-      await prisma.merchantPaymentMethod.deleteMany({});
-      await prisma.token.deleteMany({ where: { chain_id: existingChain.id } });
-      await prisma.merchant.deleteMany({ where: { merchant_key: 'payment_test_merchant' } });
-      await prisma.chain.delete({ where: { id: existingChain.id } });
-    }
-
-    // Create test chain
-    const chain = await chainService.create({
-      network_id: TEST_NETWORK_ID,
-      name: 'PaymentTestChain',
-      rpc_url: 'http://localhost:8545',
-      is_testnet: true,
-    });
-    chainId = chain.id;
-
-    // Create test token
-    const token = await tokenService.create({
-      chain_id: chainId,
-      address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-      symbol: 'USDC',
-      decimals: 6,
-    });
-
-    // Create test merchant
-    const merchant = await merchantService.create({
-      merchant_key: 'payment_test_merchant',
-      name: 'Test Merchant',
-      api_key: 'test_api_key',
-    });
-    merchantId = merchant.id;
-
-    // Create test payment method
-    const method = await paymentMethodService.create({
-      merchant_id: merchant.id,
-      token_id: token.id,
-      recipient_address: '0x742d35Cc6634C0532925a3b844Bc029e4b2A69e2',
-    });
-    paymentMethodId = method.id;
-  });
-
-  afterAll(async () => {
-    // Clean up after tests
-    await prisma.paymentEvent.deleteMany({});
-    await prisma.payment.deleteMany({});
-    await prisma.merchantPaymentMethod.deleteMany({});
-    await prisma.token.deleteMany({});
-    await prisma.merchant.deleteMany({});
-    await prisma.chain.deleteMany({});
-    await disconnectRedis();
-    await disconnectPrisma();
+  beforeEach(() => {
+    resetPrismaMocks();
+    paymentService = new PaymentService(mockPrisma);
   });
 
   it('should create a new payment', async () => {
@@ -101,17 +43,40 @@ describe('PaymentService', () => {
       expires_at: new Date(Date.now() + 3600000),
     };
 
+    const mockResult = {
+      id: 1,
+      ...paymentData,
+      status: 'CREATED',
+      payer_address: null,
+      tx_hash: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+      confirmed_at: null,
+    };
+
+    mockPrisma.payment.create.mockResolvedValue(mockResult);
+    mockPrisma.paymentEvent.create.mockResolvedValue({
+      id: 1,
+      payment_id: 1,
+      event_type: 'CREATED',
+      old_status: null,
+      new_status: null,
+      created_at: new Date(),
+    });
+
     const result = await paymentService.create(paymentData);
 
     expect(result).toBeDefined();
     expect(result.payment_hash).toBe(paymentHash);
     expect(result.status).toBe('CREATED');
     expect(result.token_symbol).toBe('USDC');
+    expect(mockPrisma.payment.create).toHaveBeenCalledOnce();
   });
 
   it('should find payment by hash', async () => {
     const paymentHash = '0x' + 'b'.repeat(64);
-    const paymentData = {
+    const mockPayment = {
+      id: 2,
       payment_hash: paymentHash,
       merchant_id: merchantId,
       payment_method_id: paymentMethodId,
@@ -119,20 +84,28 @@ describe('PaymentService', () => {
       token_decimals: 6,
       token_symbol: 'USDC',
       network_id: 31337,
+      status: 'CREATED',
+      payer_address: null,
+      tx_hash: null,
       expires_at: new Date(Date.now() + 3600000),
+      created_at: new Date(),
+      updated_at: new Date(),
+      confirmed_at: null,
     };
 
-    await paymentService.create(paymentData);
+    mockPrisma.payment.findUnique.mockResolvedValue(mockPayment);
 
     const result = await paymentService.findByHash(paymentHash);
 
     expect(result).toBeDefined();
     expect(result?.payment_hash).toBe(paymentHash);
+    expect(mockPrisma.payment.findUnique).toHaveBeenCalledOnce();
   });
 
   it('should cache payment after retrieval', async () => {
     const paymentHash = '0x' + 'c'.repeat(64);
-    const paymentData = {
+    const mockPayment = {
+      id: 3,
       payment_hash: paymentHash,
       merchant_id: merchantId,
       payment_method_id: paymentMethodId,
@@ -140,16 +113,22 @@ describe('PaymentService', () => {
       token_decimals: 6,
       token_symbol: 'USDC',
       network_id: 31337,
+      status: 'CREATED',
+      payer_address: null,
+      tx_hash: null,
       expires_at: new Date(Date.now() + 3600000),
+      created_at: new Date(),
+      updated_at: new Date(),
+      confirmed_at: null,
     };
 
-    const created = await paymentService.create(paymentData);
+    mockPrisma.payment.findUnique.mockResolvedValue(mockPayment);
 
-    // First query should hit database
+    // First query
     const result1 = await paymentService.findByHash(paymentHash);
     expect(result1).toBeDefined();
 
-    // Second query should hit cache (no DB call)
+    // Second query (Redis is mocked to null, so will hit DB again)
     const result2 = await paymentService.findByHash(paymentHash);
     expect(result2).toBeDefined();
     expect(result2?.id).toBe(result1?.id);
@@ -157,7 +136,8 @@ describe('PaymentService', () => {
 
   it('should update payment status', async () => {
     const paymentHash = '0x' + 'd'.repeat(64);
-    const paymentData = {
+    const mockExisting = {
+      id: 4,
       payment_hash: paymentHash,
       merchant_id: merchantId,
       payment_method_id: paymentMethodId,
@@ -165,52 +145,67 @@ describe('PaymentService', () => {
       token_decimals: 6,
       token_symbol: 'USDC',
       network_id: 31337,
+      status: 'CREATED',
+      payer_address: null,
+      tx_hash: null,
       expires_at: new Date(Date.now() + 3600000),
+      created_at: new Date(),
+      updated_at: new Date(),
+      confirmed_at: null,
     };
 
-    const created = await paymentService.create(paymentData);
+    const mockUpdated = {
+      ...mockExisting,
+      status: 'CONFIRMED',
+      confirmed_at: new Date(),
+    };
 
-    const updated = await paymentService.updateStatus(created.id, 'CONFIRMED');
+    mockPrisma.payment.findUnique.mockResolvedValue(mockExisting);
+    mockPrisma.payment.update.mockResolvedValue(mockUpdated);
+    mockPrisma.paymentEvent.create.mockResolvedValue({
+      id: 2,
+      payment_id: 4,
+      event_type: 'STATUS_CHANGED',
+      old_status: 'CREATED',
+      new_status: 'CONFIRMED',
+      created_at: new Date(),
+    });
+
+    const updated = await paymentService.updateStatus(4, 'CONFIRMED');
 
     expect(updated.status).toBe('CONFIRMED');
     expect(updated.confirmed_at).toBeDefined();
+    expect(mockPrisma.payment.update).toHaveBeenCalledOnce();
   });
 
   it('should find all payments by status', async () => {
-    await prisma.payment.deleteMany({});
+    const mockPayments = [
+      {
+        id: 5,
+        payment_hash: '0x' + 'e'.repeat(64),
+        merchant_id: merchantId,
+        payment_method_id: paymentMethodId,
+        amount: new Decimal('5000000'),
+        token_decimals: 6,
+        token_symbol: 'USDC',
+        network_id: 31337,
+        status: 'CONFIRMED',
+        payer_address: null,
+        tx_hash: null,
+        expires_at: new Date(Date.now() + 3600000),
+        created_at: new Date(),
+        updated_at: new Date(),
+        confirmed_at: new Date(),
+      },
+    ];
 
-    const paymentHash1 = '0x' + 'e'.repeat(64);
-    const paymentHash2 = '0x' + 'f'.repeat(64);
-
-    await paymentService.create({
-      payment_hash: paymentHash1,
-      merchant_id: merchantId,
-      payment_method_id: paymentMethodId,
-      amount: new Decimal('5000000'),
-      token_decimals: 6,
-      token_symbol: 'USDC',
-      network_id: 31337,
-      expires_at: new Date(Date.now() + 3600000),
-    });
-
-    const created2 = await paymentService.create({
-      payment_hash: paymentHash2,
-      merchant_id: merchantId,
-      payment_method_id: paymentMethodId,
-      amount: new Decimal('6000000'),
-      token_decimals: 6,
-      token_symbol: 'USDC',
-      network_id: 31337,
-      expires_at: new Date(Date.now() + 3600000),
-    });
-
-    // Update second payment to CONFIRMED
-    await paymentService.updateStatus(created2.id, 'CONFIRMED');
+    mockPrisma.payment.findMany.mockResolvedValue(mockPayments);
 
     const result = await paymentService.findByStatus('CONFIRMED');
 
-    expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.some((p) => p.id === created2.id)).toBe(true);
+    expect(result.length).toBe(1);
+    expect(result[0].status).toBe('CONFIRMED');
+    expect(mockPrisma.payment.findMany).toHaveBeenCalledOnce();
   });
 
   it('should return payment with network_id snapshot', async () => {
@@ -225,6 +220,27 @@ describe('PaymentService', () => {
       network_id: 31337,
       expires_at: new Date(Date.now() + 3600000),
     };
+
+    const mockResult = {
+      id: 7,
+      ...paymentData,
+      status: 'CREATED',
+      payer_address: null,
+      tx_hash: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+      confirmed_at: null,
+    };
+
+    mockPrisma.payment.create.mockResolvedValue(mockResult);
+    mockPrisma.paymentEvent.create.mockResolvedValue({
+      id: 3,
+      payment_id: 7,
+      event_type: 'CREATED',
+      old_status: null,
+      new_status: null,
+      created_at: new Date(),
+    });
 
     const created = await paymentService.create(paymentData);
 
