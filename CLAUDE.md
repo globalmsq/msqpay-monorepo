@@ -411,6 +411,12 @@ Error handling procedure:
 - **Error Messages**: `error_messages` setting (default: user language)
 - **Success Messages**: Provided in user language
 
+### Git Commit Rules
+
+- **No Claude Attribution**: Never include Claude or AI as code author or co-author in commits
+- **No Co-authored-by Trailer**: Do not add Co-authored-by trailer mentioning Claude, AI, or any AI assistant
+- **No AI Attribution in Messages**: Commit messages must not contain references to AI-assisted development
+
 ### Documentation Standards Rules
 
 - **Absolutely Prohibited**: Including code examples in instructions
