@@ -1,9 +1,9 @@
 ---
 id: SPEC-API-001
-version: "1.0.0"
-status: "in-progress"
+version: "1.1.0"
+status: "completed"
 created: "2025-12-01"
-updated: "2025-12-01"
+updated: "2025-12-09"
 author: "R2-D2"
 priority: "high"
 ---
@@ -13,6 +13,7 @@ priority: "high"
 | 버전 | 날짜 | 작성자 | 변경 내역 |
 |------|------|--------|----------|
 | 1.0.0 | 2025-12-01 | R2-D2 | 초안 작성 (SPEC-API-002에서 SPEC-API-001로 리팩토링) |
+| 1.1.0 | 2025-12-09 | System | 구현 완료 - 서버 Single Source of Truth 달성, Demo App 트랜잭션에서 서버 응답 주소 사용 |
 
 ---
 
