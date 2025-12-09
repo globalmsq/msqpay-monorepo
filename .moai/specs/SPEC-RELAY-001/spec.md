@@ -4,7 +4,7 @@
 
 - SPEC-ID: SPEC-RELAY-001
 - Title: OZ Defender API 호환 Gasless 트랜잭션 시스템 구현
-- Status: Implemented
+- Status: completed
 - Priority: High
 - Version: 4.1.0
 - Created: 2025-12-01
