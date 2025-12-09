@@ -152,6 +152,39 @@ const response = await client.executeRelay({
 }
 ```
 
+### getPaymentHistory(params)
+
+Retrieve payment history for a specific payer address.
+
+```typescript
+const response = await client.getPaymentHistory({
+  chainId: number;      // Blockchain chain ID (e.g., 31337, 80002)
+  payer: string;        // Payer wallet address
+  limit?: number;       // Optional: Number of records to return
+});
+
+// Response
+{
+  success: true;
+  data: [
+    {
+      paymentId: string;        // Payment ID (bytes32 hash)
+      payer: string;            // Payer address
+      merchant: string;         // Merchant address
+      token: string;            // Token contract address
+      tokenSymbol: string;      // Token symbol (e.g., "USDC")
+      decimals: number;         // Token decimals
+      amount: string;           // Amount in wei
+      timestamp: string;        // Unix timestamp
+      transactionHash: string;  // Transaction hash
+      status: string;           // Payment status
+      isGasless: boolean;       // Whether gasless payment
+      relayId?: string;         // Relay request ID (if gasless)
+    }
+  ];
+}
+```
+
 ### setApiUrl(url)
 
 Dynamically change the API URL.
@@ -214,6 +247,9 @@ import {
   GaslessResponse,
   RelayParams,
   RelayResponse,
+  GetPaymentHistoryParams,
+  PaymentHistoryItem,
+  PaymentHistoryResponse,
   ErrorResponse
 } from '@globalmsq/msqpay';
 ```
@@ -248,6 +284,27 @@ interface RelayParams {
   paymentId: string;
   transactionData: string;   // 0x hex string
   gasEstimate: number;
+}
+
+interface GetPaymentHistoryParams {
+  chainId: number;           // Blockchain chain ID
+  payer: string;             // Payer wallet address (0x + 40 hex)
+  limit?: number;            // Optional: Number of records
+}
+
+interface PaymentHistoryItem {
+  paymentId: string;
+  payer: string;
+  merchant: string;
+  token: string;
+  tokenSymbol: string;
+  decimals: number;
+  amount: string;
+  timestamp: string;
+  transactionHash: string;
+  status: string;
+  isGasless: boolean;
+  relayId?: string;
 }
 ```
 
@@ -314,7 +371,7 @@ processPayment();
 - ✅ **Type-Safe Error Handling**: `MSQPayError` class with error codes
 - ✅ **Environment Management**: Built-in support for multiple environments
 - ✅ **API Key Authentication**: Secure header-based authentication
-- ✅ **Comprehensive Test Coverage**: 100% coverage with 26+ test cases
+- ✅ **Comprehensive Test Coverage**: 100% coverage with 32+ test cases
 
 ## Testing
 

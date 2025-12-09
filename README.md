@@ -263,9 +263,9 @@ ERC-20 토큰의 지갑 상태를 조회합니다:
 | Smart Contract | Solidity 0.8.24, OpenZeppelin 5.x |
 | Contract Framework | Hardhat |
 | Payment Server | Node.js, Fastify v5, viem v2.21 |
-| Payment Server Tests | Vitest, 65+ test cases, 82.89% coverage |
+| Payment Server Tests | Vitest, 230+ test cases, 82.89% coverage |
 | SDK | TypeScript, Node 18+ native fetch (no dependencies) |
-| SDK Tests | Vitest, 26+ test cases, 100% coverage |
+| SDK Tests | Vitest, 32+ test cases, 100% coverage |
 | Relay | OpenZeppelin Defender |
 | Demo App | Next.js 14, wagmi, RainbowKit |
 | Package Manager | pnpm |
