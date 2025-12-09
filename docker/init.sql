@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS chains (
     network_id INT NOT NULL UNIQUE COMMENT 'EIP-155 chain ID',
     name VARCHAR(255) NOT NULL,
     rpc_url VARCHAR(500) NOT NULL,
+    gateway_address VARCHAR(42) NULL COMMENT 'PaymentGateway proxy address',
+    forwarder_address VARCHAR(42) NULL COMMENT 'ERC2771Forwarder address',
     is_testnet BOOLEAN NOT NULL DEFAULT FALSE,
     is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
@@ -155,21 +157,21 @@ CREATE TABLE IF NOT EXISTS payment_events (
 -- ============================================================
 
 -- Chains (7 networks)
--- id=1: Localhost (Hardhat/Anvil)
--- id=2: Sepolia (Ethereum Testnet)
--- id=3: Amoy (Polygon Testnet)
--- id=4: BNB Chain Testnet
--- id=5: Polygon (Mainnet)
--- id=6: Ethereum (Mainnet)
--- id=7: BNB Chain (Mainnet)
-INSERT INTO chains (network_id, name, rpc_url, is_testnet) VALUES
-(31337, 'Localhost', 'http://localhost:8545', TRUE),
-(11155111, 'Sepolia', 'https://ethereum-sepolia-rpc.publicnode.com', TRUE),
-(80002, 'Amoy', 'https://rpc-amoy.polygon.technology', TRUE),
-(97, 'BNB Chain Testnet', 'https://data-seed-prebsc-1-s1.binance.org:8545', TRUE),
-(137, 'Polygon', 'https://polygon-rpc.com', FALSE),
-(1, 'Ethereum', 'https://eth.llamarpc.com', FALSE),
-(56, 'BNB Chain', 'https://bsc-dataseed.binance.org', FALSE);
+-- id=1: Localhost (Hardhat/Anvil) - with deployed contracts
+-- id=2: Sepolia (Ethereum Testnet) - no contracts yet
+-- id=3: Amoy (Polygon Testnet) - with deployed contracts
+-- id=4: BNB Chain Testnet - no contracts yet
+-- id=5: Polygon (Mainnet) - no contracts yet
+-- id=6: Ethereum (Mainnet) - no contracts yet
+-- id=7: BNB Chain (Mainnet) - no contracts yet
+INSERT INTO chains (network_id, name, rpc_url, gateway_address, forwarder_address, is_testnet) VALUES
+(31337, 'Localhost', 'http://hardhat:8545', '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9', '0x5FbDB2315678afecb367f032d93F642f64180aa3', TRUE),
+(11155111, 'Sepolia', 'https://ethereum-sepolia-rpc.publicnode.com', NULL, NULL, TRUE),
+(80002, 'Amoy', 'https://rpc-amoy.polygon.technology', '0x2256bedB57869AF4fadF16e1ebD534A7d47513d7', '0x0d9A0fAf9a8101368aa01B88442B38f82180520E', TRUE),
+(97, 'BNB Chain Testnet', 'https://data-seed-prebsc-1-s1.binance.org:8545', NULL, NULL, TRUE),
+(137, 'Polygon', 'https://polygon-rpc.com', NULL, NULL, FALSE),
+(1, 'Ethereum', 'https://eth.llamarpc.com', NULL, NULL, FALSE),
+(56, 'BNB Chain', 'https://bsc-dataseed.binance.org', NULL, NULL, FALSE);
 
 -- Tokens (3 tokens)
 -- id=1: TEST on Localhost (chain_id=1)
@@ -185,10 +187,12 @@ INSERT INTO tokens (chain_id, address, symbol, decimals) VALUES
 INSERT INTO merchants (merchant_key, name, api_key_hash, webhook_url) VALUES
 ('merchant_demo_001', 'Demo Store', 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3', 'https://webhook.site/demo');
 
--- Demo Payment Method (id=1, merchant_id=1, token_id=1)
--- Demo Merchant + TEST on Localhost
+-- Demo Payment Methods
+-- id=1: Demo Merchant + TEST on Localhost (token_id=1)
+-- id=2: Demo Merchant + SUT on Amoy (token_id=3)
 INSERT INTO merchant_payment_methods (merchant_id, token_id, recipient_address) VALUES
-(1, 1, '0x70997970c51812dc3a010c7d01b50e0d17dc79c8');
+(1, 1, '0x70997970c51812dc3a010c7d01b50e0d17dc79c8'),
+(1, 3, '0x31d45F29071e73836F67ec9dFf53e8af67A74f39');
 
 -- Show created tables
 SHOW TABLES;

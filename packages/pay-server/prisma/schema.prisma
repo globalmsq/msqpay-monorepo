@@ -34,16 +34,18 @@ enum EventType {
 }
 
 model Chain {
-  id         Int      @id @default(autoincrement())
-  network_id Int      @unique  // EIP-155 chain ID
-  name       String
-  rpc_url    String
-  is_testnet Boolean  @default(false)
-  is_enabled Boolean  @default(true)
-  is_deleted Boolean  @default(false)
-  deleted_at DateTime?
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  id               Int      @id @default(autoincrement())
+  network_id       Int      @unique  // EIP-155 chain ID
+  name             String
+  rpc_url          String
+  gateway_address   String?  @db.VarChar(42)  // PaymentGateway proxy address
+  forwarder_address String?  @db.VarChar(42)  // ERC2771Forwarder address
+  is_testnet       Boolean  @default(false)
+  is_enabled       Boolean  @default(true)
+  is_deleted       Boolean  @default(false)
+  deleted_at       DateTime?
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
 
   @@map("chains")
 }

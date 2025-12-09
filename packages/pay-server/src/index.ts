@@ -1,8 +1,6 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
-import path from 'path';
 
-import { loadChainsConfig } from './config/chains.config';
 import { createLogger } from './lib/logger';
 import { BlockchainService } from './services/blockchain.service';
 import { DefenderService } from './services/defender.service';
@@ -30,26 +28,15 @@ const server = Fastify({
 
 const logger = createLogger('Server');
 
-// Load chain configuration from JSON file
-// Environment variables: CHAINS_CONFIG_PATH (default: ./chains.json)
-const configPath = process.env.CHAINS_CONFIG_PATH || path.join(process.cwd(), 'chains.json');
-logger.info(`📋 Loading chain config from: ${configPath}`);
-
-let chainsConfig;
-try {
-  chainsConfig = loadChainsConfig(configPath);
-  logger.info(`🔗 Supported chains: ${chainsConfig.chains.map(c => `${c.name}(${c.chainId})`).join(', ')}`);
-} catch (error) {
-  logger.error({ err: error }, `❌ Failed to load chain configuration from ${configPath}`);
-  process.exit(1);
-}
-
 // Initialize database clients
 const prisma = getPrismaClient();
 getRedisClient();
 
-// Initialize BlockchainService with multi-chain config
-const blockchainService = new BlockchainService(chainsConfig);
+// Initialize database services (ChainService needed for BlockchainService initialization)
+const chainService = new ChainService(prisma);
+
+// BlockchainService will be initialized after loading chains from DB
+let blockchainService: BlockchainService;
 
 // Initialize Defender service for gasless transactions
 // Production: https://api.defender.openzeppelin.com
@@ -60,10 +47,9 @@ const defenderApiSecret = process.env.DEFENDER_API_SECRET || '';
 const relayerAddress = process.env.RELAYER_ADDRESS || '0x0000000000000000000000000000000000000000';
 const defenderService = new DefenderService(defenderApiUrl, defenderApiKey, defenderApiSecret, relayerAddress);
 
-// Initialize database services
+// Initialize other database services
 const paymentService = new PaymentService(prisma);
 const merchantService = new MerchantService(prisma);
-const chainService = new ChainService(prisma);
 const tokenService = new TokenService(prisma);
 const paymentMethodService = new PaymentMethodService(prisma);
 const relayService = new RelayService(prisma);
@@ -130,6 +116,20 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 // Start server
 const start = async () => {
   try {
+    // Load chain configuration from database
+    logger.info('📋 Loading chain configuration from database...');
+    const chainsWithTokens = await chainService.findAllWithTokens();
+
+    if (chainsWithTokens.length === 0) {
+      logger.error('❌ No chains with contract addresses found in database');
+      logger.error('💡 Make sure chains table has gateway_address and forwarder_address set');
+      process.exit(1);
+    }
+
+    // Initialize BlockchainService with DB data
+    blockchainService = new BlockchainService(chainsWithTokens);
+    logger.info(`🔗 Supported chains: ${blockchainService.getSupportedChainIds().join(', ')}`);
+
     await registerRoutes();
 
     const port = Number(process.env.PORT) || 3001;
