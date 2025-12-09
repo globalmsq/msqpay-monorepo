@@ -10,7 +10,17 @@
     "clean": "hardhat clean && rm -rf cache artifacts typechain-types",
     "deploy:local": "hardhat ignition deploy ./ignition/modules/PaymentGateway.ts --network localhost",
     "deploy:amoy": "hardhat ignition deploy ./ignition/modules/PaymentGateway.ts --network polygonAmoy",
-    "verify": "hardhat verify --network polygonAmoy"
+    "deploy:polygon": "hardhat ignition deploy ./ignition/modules/PaymentGateway.ts --network polygon",
+    "deploy:sepolia": "hardhat ignition deploy ./ignition/modules/PaymentGateway.ts --network ethereumSepolia",
+    "deploy:ethereum": "hardhat ignition deploy ./ignition/modules/PaymentGateway.ts --network ethereum",
+    "deploy:bnb-testnet": "hardhat ignition deploy ./ignition/modules/PaymentGateway.ts --network bnbTestnet",
+    "deploy:bnb": "hardhat ignition deploy ./ignition/modules/PaymentGateway.ts --network bnb",
+    "verify:amoy": "hardhat ignition verify chain-80002",
+    "verify:polygon": "hardhat ignition verify chain-137",
+    "verify:sepolia": "hardhat ignition verify chain-11155111",
+    "verify:ethereum": "hardhat ignition verify chain-1",
+    "verify:bnb-testnet": "hardhat ignition verify chain-97",
+    "verify:bnb": "hardhat ignition verify chain-56"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
