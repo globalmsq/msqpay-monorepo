@@ -3,7 +3,7 @@
 ---
 id: SPEC-LOG-001
 title: Console.log를 Pino 로거로 전환 - 구현 계획
-status: draft
+status: completed
 ---
 
 ## 1. 구현 개요

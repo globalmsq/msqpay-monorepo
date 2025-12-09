@@ -3,9 +3,10 @@
 ---
 id: SPEC-LOG-001
 title: Console.log를 Pino 로거로 전환
-status: draft
+status: completed
 priority: high
 created: 2025-12-09
+completed: 2025-12-09
 tags: [logging, pino, fastify, refactoring]
 ---
 
