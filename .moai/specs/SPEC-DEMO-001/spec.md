@@ -1,9 +1,9 @@
 ---
 id: SPEC-DEMO-001
-version: "1.0.0"
-status: "draft"
+version: "1.1.0"
+status: "completed"
 created: "2025-11-30"
-updated: "2025-11-30"
+updated: "2025-12-09"
 author: "manager-spec"
 priority: "high"
 ---
@@ -13,6 +13,7 @@ priority: "high"
 | 버전 | 날짜 | 변경 내용 | 작성자 |
 |------|------|-----------|--------|
 | 1.0.0 | 2025-11-30 | 초기 SPEC 생성 | manager-spec |
+| 1.1.0 | 2025-12-09 | 구현 완료 - 5개 API Routes, SDK Singleton, Frontend 통합 | System |
 
 ---
 
