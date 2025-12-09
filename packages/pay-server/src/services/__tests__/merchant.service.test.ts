@@ -3,6 +3,9 @@ import { MerchantService } from '../merchant.service';
 import { getPrismaClient, disconnectPrisma } from '../../db/client';
 import crypto from 'crypto';
 
+// Unique prefix for this test suite to avoid conflicts with other tests
+const TEST_PREFIX = 'merchant_svc_test_';
+
 describe('MerchantService', () => {
   let merchantService: MerchantService;
   let prisma: ReturnType<typeof getPrismaClient>;
@@ -11,19 +14,23 @@ describe('MerchantService', () => {
     prisma = getPrismaClient();
     merchantService = new MerchantService(prisma);
 
-    // Clean up before tests
-    await prisma.merchant.deleteMany({});
+    // Clean up before tests - only our test-specific merchants
+    await prisma.merchant.deleteMany({
+      where: { merchant_key: { startsWith: TEST_PREFIX } },
+    });
   });
 
   afterAll(async () => {
-    // Clean up after tests
-    await prisma.merchant.deleteMany({});
+    // Clean up after tests - only our test-specific merchants
+    await prisma.merchant.deleteMany({
+      where: { merchant_key: { startsWith: TEST_PREFIX } },
+    });
     await disconnectPrisma();
   });
 
   it('should create a new merchant with hashed API key', async () => {
     const merchantData = {
-      merchant_key: 'test_merchant_001',
+      merchant_key: `${TEST_PREFIX}001`,
       name: 'Test Merchant',
       api_key: 'secret_key_12345',
     };
@@ -31,7 +38,7 @@ describe('MerchantService', () => {
     const result = await merchantService.create(merchantData);
 
     expect(result).toBeDefined();
-    expect(result.merchant_key).toBe('test_merchant_001');
+    expect(result.merchant_key).toBe(`${TEST_PREFIX}001`);
     expect(result.name).toBe('Test Merchant');
     expect(result.is_enabled).toBe(true);
     expect(result.is_deleted).toBe(false);
@@ -43,7 +50,7 @@ describe('MerchantService', () => {
 
   it('should find merchant by ID', async () => {
     const merchantData = {
-      merchant_key: 'test_merchant_002',
+      merchant_key: `${TEST_PREFIX}002`,
       name: 'Another Merchant',
       api_key: 'another_secret_key',
     };
@@ -58,14 +65,14 @@ describe('MerchantService', () => {
 
   it('should find merchant by merchant key', async () => {
     const merchantData = {
-      merchant_key: 'test_merchant_003',
+      merchant_key: `${TEST_PREFIX}003`,
       name: 'Key-based Merchant',
       api_key: 'key_based_secret',
     };
 
     await merchantService.create(merchantData);
 
-    const result = await merchantService.findByMerchantKey('test_merchant_003');
+    const result = await merchantService.findByMerchantKey(`${TEST_PREFIX}003`);
 
     expect(result).toBeDefined();
     expect(result?.name).toBe('Key-based Merchant');
@@ -74,7 +81,7 @@ describe('MerchantService', () => {
   it('should verify API key correctly', async () => {
     const apiKey = 'test_api_key_for_verification';
     const merchantData = {
-      merchant_key: 'test_merchant_004',
+      merchant_key: `${TEST_PREFIX}004`,
       name: 'Verification Merchant',
       api_key: apiKey,
     };
@@ -91,16 +98,17 @@ describe('MerchantService', () => {
   });
 
   it('should find all enabled merchants', async () => {
-    await prisma.merchant.deleteMany({});
+    // Use unique keys for this test
+    const uniqueSuffix = Date.now().toString();
 
     await merchantService.create({
-      merchant_key: 'merchant_a',
+      merchant_key: `${TEST_PREFIX}findall_a_${uniqueSuffix}`,
       name: 'Merchant A',
       api_key: 'key_a',
     });
 
     await merchantService.create({
-      merchant_key: 'merchant_b',
+      merchant_key: `${TEST_PREFIX}findall_b_${uniqueSuffix}`,
       name: 'Merchant B',
       api_key: 'key_b',
     });
@@ -111,8 +119,9 @@ describe('MerchantService', () => {
   });
 
   it('should update merchant information', async () => {
+    const uniqueSuffix = Date.now().toString();
     const merchantData = {
-      merchant_key: 'merchant_update',
+      merchant_key: `${TEST_PREFIX}update_${uniqueSuffix}`,
       name: 'Original Name',
       api_key: 'original_key',
     };
@@ -129,8 +138,9 @@ describe('MerchantService', () => {
   });
 
   it('should soft delete merchant', async () => {
+    const uniqueSuffix = Date.now().toString();
     const merchantData = {
-      merchant_key: 'merchant_delete',
+      merchant_key: `${TEST_PREFIX}delete_${uniqueSuffix}`,
       name: 'Delete Test',
       api_key: 'delete_key',
     };
@@ -153,8 +163,9 @@ describe('MerchantService', () => {
   });
 
   it('should not return api_key_hash in public response', async () => {
+    const uniqueSuffix = Date.now().toString();
     const merchantData = {
-      merchant_key: 'merchant_private',
+      merchant_key: `${TEST_PREFIX}private_${uniqueSuffix}`,
       name: 'Private Key Merchant',
       api_key: 'private_key_123',
     };
@@ -167,8 +178,9 @@ describe('MerchantService', () => {
   });
 
   it('should enforce unique merchant_key constraint', async () => {
+    const uniqueSuffix = Date.now().toString();
     const merchantData = {
-      merchant_key: 'unique_merchant_key',
+      merchant_key: `${TEST_PREFIX}unique_${uniqueSuffix}`,
       name: 'Unique Test',
       api_key: 'unique_key',
     };

@@ -15,8 +15,10 @@ describe('PaymentService', () => {
   let chainService: ChainService;
   let paymentMethodService: PaymentMethodService;
   let prisma: ReturnType<typeof getPrismaClient>;
-  let paymentMethodId: string;
-  let chainId: string;
+  let paymentMethodId: number;
+  let merchantId: number;
+  let chainId: number;
+  const TEST_NETWORK_ID = 99001; // Unique network ID for this test suite
 
   beforeAll(async () => {
     prisma = getPrismaClient();
@@ -28,18 +30,22 @@ describe('PaymentService', () => {
     chainService = new ChainService(prisma);
     paymentMethodService = new PaymentMethodService(prisma);
 
-    // Clean up before tests
-    await prisma.paymentEvent.deleteMany({});
-    await prisma.payment.deleteMany({});
-    await prisma.merchantPaymentMethod.deleteMany({});
-    await prisma.token.deleteMany({});
-    await prisma.merchant.deleteMany({});
-    await prisma.chain.deleteMany({});
+    // Clean up only test-specific data - first delete existing chain if any
+    const existingChain = await prisma.chain.findFirst({ where: { network_id: TEST_NETWORK_ID } });
+    if (existingChain) {
+      await prisma.relayRequest.deleteMany({});
+      await prisma.paymentEvent.deleteMany({});
+      await prisma.payment.deleteMany({});
+      await prisma.merchantPaymentMethod.deleteMany({});
+      await prisma.token.deleteMany({ where: { chain_id: existingChain.id } });
+      await prisma.merchant.deleteMany({ where: { merchant_key: 'payment_test_merchant' } });
+      await prisma.chain.delete({ where: { id: existingChain.id } });
+    }
 
     // Create test chain
     const chain = await chainService.create({
-      network_id: 31337,
-      name: 'Hardhat',
+      network_id: TEST_NETWORK_ID,
+      name: 'PaymentTestChain',
       rpc_url: 'http://localhost:8545',
       is_testnet: true,
     });
@@ -55,10 +61,11 @@ describe('PaymentService', () => {
 
     // Create test merchant
     const merchant = await merchantService.create({
-      merchant_key: 'test_merchant',
+      merchant_key: 'payment_test_merchant',
       name: 'Test Merchant',
       api_key: 'test_api_key',
     });
+    merchantId = merchant.id;
 
     // Create test payment method
     const method = await paymentMethodService.create({
@@ -85,6 +92,7 @@ describe('PaymentService', () => {
     const paymentHash = '0x' + 'a'.repeat(64);
     const paymentData = {
       payment_hash: paymentHash,
+      merchant_id: merchantId,
       payment_method_id: paymentMethodId,
       amount: new Decimal('1000000'),
       token_decimals: 6,
@@ -105,6 +113,7 @@ describe('PaymentService', () => {
     const paymentHash = '0x' + 'b'.repeat(64);
     const paymentData = {
       payment_hash: paymentHash,
+      merchant_id: merchantId,
       payment_method_id: paymentMethodId,
       amount: new Decimal('2000000'),
       token_decimals: 6,
@@ -125,6 +134,7 @@ describe('PaymentService', () => {
     const paymentHash = '0x' + 'c'.repeat(64);
     const paymentData = {
       payment_hash: paymentHash,
+      merchant_id: merchantId,
       payment_method_id: paymentMethodId,
       amount: new Decimal('3000000'),
       token_decimals: 6,
@@ -149,6 +159,7 @@ describe('PaymentService', () => {
     const paymentHash = '0x' + 'd'.repeat(64);
     const paymentData = {
       payment_hash: paymentHash,
+      merchant_id: merchantId,
       payment_method_id: paymentMethodId,
       amount: new Decimal('4000000'),
       token_decimals: 6,
@@ -173,6 +184,7 @@ describe('PaymentService', () => {
 
     await paymentService.create({
       payment_hash: paymentHash1,
+      merchant_id: merchantId,
       payment_method_id: paymentMethodId,
       amount: new Decimal('5000000'),
       token_decimals: 6,
@@ -183,6 +195,7 @@ describe('PaymentService', () => {
 
     const created2 = await paymentService.create({
       payment_hash: paymentHash2,
+      merchant_id: merchantId,
       payment_method_id: paymentMethodId,
       amount: new Decimal('6000000'),
       token_decimals: 6,
@@ -204,6 +217,7 @@ describe('PaymentService', () => {
     const paymentHash = '0x' + '1'.repeat(64);
     const paymentData = {
       payment_hash: paymentHash,
+      merchant_id: merchantId,
       payment_method_id: paymentMethodId,
       amount: new Decimal('7000000'),
       token_decimals: 18,

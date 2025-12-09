@@ -5,25 +5,26 @@ import { getPrismaClient, disconnectPrisma } from '../../db/client';
 describe('ChainService', () => {
   let chainService: ChainService;
   let prisma: ReturnType<typeof getPrismaClient>;
+  const TEST_NETWORK_IDS = [99101, 99102, 99103, 99104, 99105, 99106, 99107, 99108]; // Unique network IDs for this test suite
 
   beforeAll(async () => {
     prisma = getPrismaClient();
     chainService = new ChainService(prisma);
 
-    // Clean up before tests
-    await prisma.chain.deleteMany({});
+    // Clean up only test-specific data
+    await prisma.chain.deleteMany({ where: { network_id: { in: TEST_NETWORK_IDS } } });
   });
 
   afterAll(async () => {
-    // Clean up after tests
-    await prisma.chain.deleteMany({});
+    // Clean up only test-specific data
+    await prisma.chain.deleteMany({ where: { network_id: { in: TEST_NETWORK_IDS } } });
     await disconnectPrisma();
   });
 
   it('should create a new chain', async () => {
     const chainData = {
-      network_id: 1,
-      name: 'Ethereum',
+      network_id: TEST_NETWORK_IDS[0],
+      name: 'TestEthereum',
       rpc_url: 'https://eth-mainnet.g.alchemy.com/v2/demo',
       is_testnet: false,
     };
@@ -31,33 +32,33 @@ describe('ChainService', () => {
     const result = await chainService.create(chainData);
 
     expect(result).toBeDefined();
-    expect(result.network_id).toBe(1);
-    expect(result.name).toBe('Ethereum');
+    expect(result.network_id).toBe(TEST_NETWORK_IDS[0]);
+    expect(result.name).toBe('TestEthereum');
     expect(result.is_enabled).toBe(true);
     expect(result.is_deleted).toBe(false);
   });
 
   it('should find chain by network ID', async () => {
     const chainData = {
-      network_id: 31337,
-      name: 'Hardhat',
+      network_id: TEST_NETWORK_IDS[1],
+      name: 'TestHardhat',
       rpc_url: 'http://localhost:8545',
       is_testnet: true,
     };
 
     await chainService.create(chainData);
 
-    const result = await chainService.findByNetworkId(31337);
+    const result = await chainService.findByNetworkId(TEST_NETWORK_IDS[1]);
 
     expect(result).toBeDefined();
-    expect(result?.network_id).toBe(31337);
-    expect(result?.name).toBe('Hardhat');
+    expect(result?.network_id).toBe(TEST_NETWORK_IDS[1]);
+    expect(result?.name).toBe('TestHardhat');
   });
 
   it('should find chain by ID', async () => {
     const chainData = {
-      network_id: 137,
-      name: 'Polygon',
+      network_id: TEST_NETWORK_IDS[2],
+      name: 'TestPolygon',
       rpc_url: 'https://polygon-rpc.com',
       is_testnet: false,
     };
@@ -67,23 +68,23 @@ describe('ChainService', () => {
 
     expect(result).toBeDefined();
     expect(result?.id).toBe(created.id);
-    expect(result?.name).toBe('Polygon');
+    expect(result?.name).toBe('TestPolygon');
   });
 
   it('should find all enabled chains', async () => {
-    // Clean up first
-    await prisma.chain.deleteMany({});
+    // Clean up test-specific data first
+    await prisma.chain.deleteMany({ where: { network_id: { in: [TEST_NETWORK_IDS[3], TEST_NETWORK_IDS[4]] } } });
 
     await chainService.create({
-      network_id: 1,
-      name: 'Ethereum',
+      network_id: TEST_NETWORK_IDS[3],
+      name: 'TestChain3',
       rpc_url: 'https://eth-mainnet.g.alchemy.com/v2/demo',
       is_testnet: false,
     });
 
     await chainService.create({
-      network_id: 137,
-      name: 'Polygon',
+      network_id: TEST_NETWORK_IDS[4],
+      name: 'TestChain4',
       rpc_url: 'https://polygon-rpc.com',
       is_testnet: false,
     });
@@ -95,8 +96,8 @@ describe('ChainService', () => {
 
   it('should update chain information', async () => {
     const chainData = {
-      network_id: 42161,
-      name: 'Arbitrum',
+      network_id: TEST_NETWORK_IDS[5],
+      name: 'TestArbitrum',
       rpc_url: 'https://arb1.arbitrum.io/rpc',
       is_testnet: false,
     };
@@ -104,18 +105,18 @@ describe('ChainService', () => {
     const created = await chainService.create(chainData);
 
     const updated = await chainService.update(created.id, {
-      name: 'Arbitrum One',
+      name: 'TestArbitrum One',
       rpc_url: 'https://arbitrum-one.publicrpc.com',
     });
 
-    expect(updated.name).toBe('Arbitrum One');
+    expect(updated.name).toBe('TestArbitrum One');
     expect(updated.rpc_url).toBe('https://arbitrum-one.publicrpc.com');
   });
 
   it('should soft delete chain', async () => {
     const chainData = {
-      network_id: 10,
-      name: 'Optimism',
+      network_id: TEST_NETWORK_IDS[6],
+      name: 'TestOptimism',
       rpc_url: 'https://mainnet.optimism.io',
       is_testnet: false,
     };
@@ -138,18 +139,19 @@ describe('ChainService', () => {
   });
 
   it('should exclude deleted chains from findAll', async () => {
-    await prisma.chain.deleteMany({});
+    // Clean up test-specific data first
+    await prisma.chain.deleteMany({ where: { network_id: { in: [TEST_NETWORK_IDS[7], 99109] } } });
 
     const chain1 = await chainService.create({
-      network_id: 1,
-      name: 'Ethereum',
+      network_id: TEST_NETWORK_IDS[7],
+      name: 'TestChain7',
       rpc_url: 'https://eth-mainnet.g.alchemy.com/v2/demo',
       is_testnet: false,
     });
 
     const chain2 = await chainService.create({
-      network_id: 2,
-      name: 'Test Chain',
+      network_id: 99109,
+      name: 'TestChain8',
       rpc_url: 'https://test.example.com',
       is_testnet: true,
     });

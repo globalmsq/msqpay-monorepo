@@ -3,6 +3,8 @@ import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import { submitGaslessRoute } from '../../../src/routes/payments/gasless';
 import { DefenderService } from '../../../src/services/defender.service';
+import { RelayService } from '../../../src/services/relay.service';
+import { PaymentService } from '../../../src/services/payment.service';
 
 // 유효한 ForwardRequest 객체 생성 헬퍼
 const createValidForwardRequest = (overrides = {}) => ({
@@ -24,9 +26,18 @@ const createValidGaslessRequest = (paymentId: string, overrides = {}) => ({
   ...overrides,
 });
 
+// Mock payment data
+const mockPaymentData = {
+  id: 'payment-db-id',
+  payment_hash: 'payment-123',
+  status: 'CREATED',
+};
+
 describe('POST /payments/:id/gasless', () => {
   let app: FastifyInstance;
   let defenderService: DefenderService;
+  let relayService: RelayService;
+  let paymentService: PaymentService;
 
   beforeEach(async () => {
     app = Fastify({ logger: false });
@@ -47,8 +58,19 @@ describe('POST /payments/:id/gasless', () => {
       getRelayerAddress: vi.fn().mockReturnValue('0x' + 'f'.repeat(40)),
     } as any;
 
+    // Mock RelayService
+    relayService = {
+      create: vi.fn().mockResolvedValue({ id: 'relay-db-id' }),
+    } as any;
+
+    // Mock PaymentService
+    paymentService = {
+      findByHash: vi.fn().mockResolvedValue(mockPaymentData),
+      updateStatus: vi.fn().mockResolvedValue(mockPaymentData),
+    } as any;
+
     // 실제 라우트 등록
-    await submitGaslessRoute(app, defenderService);
+    await submitGaslessRoute(app, defenderService, relayService, paymentService);
   });
 
   describe('정상 케이스', () => {

@@ -8,20 +8,24 @@ describe('TokenService', () => {
   let chainService: ChainService;
   let prisma: ReturnType<typeof getPrismaClient>;
   let chainId: string;
+  const TEST_NETWORK_ID = 99004; // Unique network ID for this test suite
 
   beforeAll(async () => {
     prisma = getPrismaClient();
     tokenService = new TokenService(prisma);
     chainService = new ChainService(prisma);
 
-    // Clean up before tests
-    await prisma.token.deleteMany({});
-    await prisma.chain.deleteMany({});
+    // Clean up only test-specific data - first delete existing chain if any
+    const existingChain = await prisma.chain.findFirst({ where: { network_id: TEST_NETWORK_ID } });
+    if (existingChain) {
+      await prisma.token.deleteMany({ where: { chain_id: existingChain.id } });
+      await prisma.chain.delete({ where: { id: existingChain.id } });
+    }
 
     // Create test chain
     const chain = await chainService.create({
-      network_id: 31337,
-      name: 'Hardhat',
+      network_id: TEST_NETWORK_ID,
+      name: 'TokenTestChain',
       rpc_url: 'http://localhost:8545',
       is_testnet: true,
     });
@@ -29,9 +33,9 @@ describe('TokenService', () => {
   });
 
   afterAll(async () => {
-    // Clean up after tests
-    await prisma.token.deleteMany({});
-    await prisma.chain.deleteMany({});
+    // Clean up only test-specific data
+    await prisma.token.deleteMany({ where: { chain_id: chainId } });
+    await prisma.chain.deleteMany({ where: { network_id: TEST_NETWORK_ID } });
     await disconnectPrisma();
   });
 
@@ -90,19 +94,19 @@ describe('TokenService', () => {
   });
 
   it('should find all tokens on chain', async () => {
-    await prisma.token.deleteMany({});
+    await prisma.token.deleteMany({ where: { chain_id: chainId } });
 
     await tokenService.create({
       chain_id: chainId,
-      address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-      symbol: 'USDC',
+      address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB49',
+      symbol: 'USDC2',
       decimals: 6,
     });
 
     await tokenService.create({
       chain_id: chainId,
-      address: '0x6B175474E89094C44Da98b954EedeAC495271d0F',
-      symbol: 'DAI',
+      address: '0x6B175474E89094C44Da98b954EedeAC495271d1F',
+      symbol: 'DAI2',
       decimals: 18,
     });
 

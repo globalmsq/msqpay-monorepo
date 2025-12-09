@@ -2,7 +2,39 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { createPaymentRoute } from '../create';
 import { BlockchainService } from '../../../services/blockchain.service';
-import { SUPPORTED_CHAINS } from '../../../config/chains';
+import { ChainsConfig } from '../../../config/chains.config';
+
+// 테스트용 ChainsConfig mock
+const mockChainsConfig: ChainsConfig = {
+  chains: [
+    {
+      chainId: 80002,
+      name: 'Polygon Amoy',
+      rpcUrl: 'https://rpc-amoy.polygon.technology',
+      nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
+      contracts: {
+        gateway: '0x0000000000000000000000000000000000000000',
+        forwarder: '0x0000000000000000000000000000000000000000',
+      },
+      tokens: {
+        SUT: { address: '0xE4C687167705Abf55d709395f92e254bdF5825a2', decimals: 18 },
+      },
+    },
+    {
+      chainId: 31337,
+      name: 'Hardhat',
+      rpcUrl: 'http://127.0.0.1:8545',
+      nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+      contracts: {
+        gateway: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9',
+        forwarder: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+      },
+      tokens: {
+        TEST: { address: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512', decimals: 18 },
+      },
+    },
+  ],
+};
 
 // Mock Fastify app
 const mockApp = {
@@ -14,10 +46,7 @@ describe('POST /payments/create', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    blockchainService = new BlockchainService(
-      'https://polygon-rpc.com',
-      SUPPORTED_CHAINS[0].contracts.gateway
-    );
+    blockchainService = new BlockchainService(mockChainsConfig);
   });
 
   describe('Valid requests', () => {

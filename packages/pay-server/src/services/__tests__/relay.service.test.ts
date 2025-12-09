@@ -17,7 +17,10 @@ describe('RelayService', () => {
   let chainService: ChainService;
   let paymentMethodService: PaymentMethodService;
   let prisma: ReturnType<typeof getPrismaClient>;
-  let paymentId: string;
+  let paymentId: number;
+  let merchantId: number;
+  let chainId: number;
+  const TEST_NETWORK_ID = 99002; // Unique network ID for this test suite
 
   beforeAll(async () => {
     prisma = getPrismaClient();
@@ -30,22 +33,26 @@ describe('RelayService', () => {
     chainService = new ChainService(prisma);
     paymentMethodService = new PaymentMethodService(prisma);
 
-    // Clean up before tests
-    await prisma.relayRequest.deleteMany({});
-    await prisma.paymentEvent.deleteMany({});
-    await prisma.payment.deleteMany({});
-    await prisma.merchantPaymentMethod.deleteMany({});
-    await prisma.token.deleteMany({});
-    await prisma.merchant.deleteMany({});
-    await prisma.chain.deleteMany({});
+    // Clean up only test-specific data - first delete existing chain if any
+    const existingChain = await prisma.chain.findFirst({ where: { network_id: TEST_NETWORK_ID } });
+    if (existingChain) {
+      await prisma.relayRequest.deleteMany({});
+      await prisma.paymentEvent.deleteMany({});
+      await prisma.payment.deleteMany({});
+      await prisma.merchantPaymentMethod.deleteMany({});
+      await prisma.token.deleteMany({ where: { chain_id: existingChain.id } });
+      await prisma.merchant.deleteMany({ where: { merchant_key: 'relay_test_merchant' } });
+      await prisma.chain.delete({ where: { id: existingChain.id } });
+    }
 
     // Create test chain
     const chain = await chainService.create({
-      network_id: 31337,
-      name: 'Hardhat',
+      network_id: TEST_NETWORK_ID,
+      name: 'RelayTestChain',
       rpc_url: 'http://localhost:8545',
       is_testnet: true,
     });
+    chainId = chain.id;
 
     // Create test token
     const token = await tokenService.create({
@@ -57,10 +64,11 @@ describe('RelayService', () => {
 
     // Create test merchant
     const merchant = await merchantService.create({
-      merchant_key: 'test_merchant',
-      name: 'Test Merchant',
-      api_key: 'test_api_key',
+      merchant_key: 'relay_test_merchant',
+      name: 'Relay Test Merchant',
+      api_key: 'relay_test_api_key',
     });
+    merchantId = merchant.id;
 
     // Create test payment method
     const method = await paymentMethodService.create({
@@ -69,28 +77,40 @@ describe('RelayService', () => {
       recipient_address: '0x742d35Cc6634C0532925a3b844Bc029e4b2A69e2',
     });
 
-    // Create test payment
+    // Create test payment with unique hash
+    const uniquePaymentHash = '0x' + Date.now().toString(16).padStart(64, 'a');
     const payment = await paymentService.create({
-      payment_hash: '0x' + 'a'.repeat(64),
+      payment_hash: uniquePaymentHash,
+      merchant_id: merchantId,
       payment_method_id: method.id,
       amount: new Decimal('1000000'),
       token_decimals: 6,
       token_symbol: 'USDC',
-      network_id: 31337,
+      network_id: TEST_NETWORK_ID,
       expires_at: new Date(Date.now() + 3600000),
     });
     paymentId = payment.id;
   });
 
   afterAll(async () => {
-    // Clean up after tests
-    await prisma.relayRequest.deleteMany({});
-    await prisma.paymentEvent.deleteMany({});
-    await prisma.payment.deleteMany({});
-    await prisma.merchantPaymentMethod.deleteMany({});
-    await prisma.token.deleteMany({});
-    await prisma.merchant.deleteMany({});
-    await prisma.chain.deleteMany({});
+    // Clean up only test-specific data using transaction to avoid deadlocks
+    try {
+      const existingChain = await prisma.chain.findFirst({ where: { network_id: TEST_NETWORK_ID } });
+      await prisma.$transaction(async (tx) => {
+        await tx.relayRequest.deleteMany({});
+        await tx.paymentEvent.deleteMany({});
+        await tx.payment.deleteMany({});
+        await tx.merchantPaymentMethod.deleteMany({});
+        if (existingChain) {
+          await tx.token.deleteMany({ where: { chain_id: existingChain.id } });
+        }
+        await tx.merchant.deleteMany({ where: { merchant_key: 'relay_test_merchant' } });
+        await tx.chain.deleteMany({ where: { network_id: TEST_NETWORK_ID } });
+      });
+    } catch (e) {
+      // Ignore cleanup errors in afterAll - data will be cleaned in next run
+      console.warn('Cleanup warning:', e);
+    }
     await disconnectRedis();
     await disconnectPrisma();
   });

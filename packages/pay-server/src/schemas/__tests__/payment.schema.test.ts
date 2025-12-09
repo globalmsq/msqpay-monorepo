@@ -3,9 +3,12 @@ import { CreatePaymentSchema } from '../payment.schema';
 
 describe('payment.schema.ts - CreatePaymentSchema', () => {
   const validPayload = {
+    merchantId: 'merchant_001',
+    orderId: 'order_001',
     amount: 100,
     currency: 'SUT',
     chainId: 80002,
+    tokenAddress: '0xE4C687167705Abf55d709395f92e254bdF5825a2',
     recipientAddress: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
   };
 
@@ -131,32 +134,29 @@ describe('payment.schema.ts - CreatePaymentSchema', () => {
   });
 
   describe('Schema field requirements', () => {
-    it('should have required fields: amount, currency, chainId, recipientAddress', () => {
+    it('should have required fields: merchantId, orderId, amount, currency, chainId, tokenAddress, recipientAddress', () => {
       const schema = CreatePaymentSchema.shape;
+      expect(schema).toHaveProperty('merchantId');
+      expect(schema).toHaveProperty('orderId');
       expect(schema).toHaveProperty('amount');
       expect(schema).toHaveProperty('currency');
       expect(schema).toHaveProperty('chainId');
+      expect(schema).toHaveProperty('tokenAddress');
       expect(schema).toHaveProperty('recipientAddress');
     });
 
-    it('should NOT require userId field (changed from old schema)', () => {
-      // userId는 제거되어야 함
-      const payload = validPayload;
-      const result = CreatePaymentSchema.safeParse(payload);
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect((result.data as any).userId).toBeUndefined();
-      }
+    it('should NOT require userId field (not in schema)', () => {
+      // userId는 스키마에 없음
+      const schema = CreatePaymentSchema.shape;
+      expect(schema).not.toHaveProperty('userId');
     });
 
-    it('should NOT require tokenAddress field (changed from old schema)', () => {
-      // tokenAddress는 서버가 chainId와 currency로부터 조회하므로 제거
-      const payload = validPayload;
-      const result = CreatePaymentSchema.safeParse(payload);
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect((result.data as any).tokenAddress).toBeUndefined();
-      }
+    it('should require tokenAddress field (added in new schema)', () => {
+      // tokenAddress는 필수 필드
+      const payloadWithoutToken = { ...validPayload };
+      delete (payloadWithoutToken as any).tokenAddress;
+      const result = CreatePaymentSchema.safeParse(payloadWithoutToken);
+      expect(result.success).toBe(false);
     });
   });
 });

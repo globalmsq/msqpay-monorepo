@@ -1,15 +1,45 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { BlockchainService } from '../../src/services/blockchain.service';
+import { ChainsConfig } from '../../src/config/chains.config';
+
+// 테스트용 ChainsConfig mock
+const mockChainsConfig: ChainsConfig = {
+  chains: [
+    {
+      chainId: 80002,
+      name: 'Polygon Amoy',
+      rpcUrl: 'https://rpc-amoy.polygon.technology',
+      nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
+      contracts: {
+        gateway: '0x0000000000000000000000000000000000000000',
+        forwarder: '0x0000000000000000000000000000000000000000',
+      },
+      tokens: {
+        SUT: { address: '0xE4C687167705Abf55d709395f92e254bdF5825a2', decimals: 18 },
+      },
+    },
+    {
+      chainId: 31337,
+      name: 'Hardhat',
+      rpcUrl: 'http://127.0.0.1:8545',
+      nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+      contracts: {
+        gateway: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9',
+        forwarder: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+      },
+      tokens: {
+        TEST: { address: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512', decimals: 18 },
+      },
+    },
+  ],
+};
 
 describe('BlockchainService', () => {
   let blockchainService: BlockchainService;
 
   beforeEach(() => {
     // 실제 RPC 대신 mock을 사용
-    blockchainService = new BlockchainService(
-      'https://polygon-rpc.com',
-      '0x' + 'a'.repeat(40)
-    );
+    blockchainService = new BlockchainService(mockChainsConfig);
   });
 
   describe('recordPaymentOnChain', () => {
@@ -73,7 +103,7 @@ describe('BlockchainService', () => {
   describe('getPaymentStatus', () => {
     it('결제 정보를 조회할 때 PaymentStatus를 반환해야 함', async () => {
       // RPC 호출 실패 시에도 pending 상태로 반환 (fail-safe 설계)
-      const result = await blockchainService.getPaymentStatus('payment-123');
+      const result = await blockchainService.getPaymentStatus(31337, 'payment-123');
       expect(result).toBeDefined();
       expect(result?.status).toBe('pending');
       expect(result?.paymentId).toBe('payment-123');
@@ -81,7 +111,7 @@ describe('BlockchainService', () => {
 
     it('존재하지 않는 결제 ID로 조회하면 pending 상태로 반환해야 함', async () => {
       // RPC 호출 실패 시에도 pending 상태로 반환하여 polling 계속 가능하도록 함
-      const result = await blockchainService.getPaymentStatus('nonexistent-id');
+      const result = await blockchainService.getPaymentStatus(31337, 'nonexistent-id');
       expect(result).toBeDefined();
       expect(result?.status).toBe('pending');
     });
@@ -90,6 +120,7 @@ describe('BlockchainService', () => {
   describe('estimateGasCost', () => {
     it('가스 비용을 추정해야 함', async () => {
       const gasCost = await blockchainService.estimateGasCost(
+        31337,
         '0x' + 'a'.repeat(40),
         BigInt(100),
         '0x' + 'b'.repeat(40)
@@ -100,6 +131,7 @@ describe('BlockchainService', () => {
 
     it('다른 금액에도 가스 비용을 추정해야 함', async () => {
       const gasCost = await blockchainService.estimateGasCost(
+        31337,
         '0x' + 'c'.repeat(40),
         BigInt(1000),
         '0x' + 'd'.repeat(40)
@@ -125,7 +157,7 @@ describe('BlockchainService', () => {
         transactionHash: mockTxHash,
       });
 
-      const result = await blockchainService.waitForConfirmation(mockTxHash);
+      const result = await blockchainService.waitForConfirmation(31337, mockTxHash);
 
       expect(result).toBeDefined();
       expect(result?.status).toBe('success');
@@ -141,7 +173,7 @@ describe('BlockchainService', () => {
         transactionHash: mockTxHash,
       });
 
-      const result = await blockchainService.waitForConfirmation(mockTxHash, 3);
+      const result = await blockchainService.waitForConfirmation(31337, mockTxHash, 3);
 
       expect(result).toBeDefined();
       expect(result?.blockNumber).toBe(BigInt(12350));
@@ -153,7 +185,7 @@ describe('BlockchainService', () => {
     // RPC 에러 발생 시에도 fail-safe 설계로 pending 상태로 반환
     it('getPaymentStatus 호출 시 스마트 컨트랙트 에러를 적절히 처리해야 함', async () => {
       // RPC 호출 실패 시에도 pending 상태로 안전하게 반환
-      const result = await blockchainService.getPaymentStatus('test-id');
+      const result = await blockchainService.getPaymentStatus(31337, 'test-id');
       expect(result).toBeDefined();
       expect(result?.status).toBe('pending');
       expect(result?.paymentId).toBe('test-id');

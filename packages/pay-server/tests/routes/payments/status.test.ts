@@ -3,11 +3,21 @@ import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import { getPaymentStatusRoute } from '../../../src/routes/payments/status';
 import { BlockchainService } from '../../../src/services/blockchain.service';
+import { PaymentService } from '../../../src/services/payment.service';
 import { PaymentStatus } from '../../../src/schemas/payment.schema';
 
 describe('GET /payments/:id/status', () => {
   let app: FastifyInstance;
   let blockchainService: BlockchainService;
+  let paymentService: PaymentService;
+
+  const mockPaymentData = {
+    id: 'payment-db-id',
+    payment_hash: 'payment-123',
+    network_id: 31337,
+    token_symbol: 'USDC',
+    status: 'PENDING',
+  };
 
   const mockPaymentStatus: PaymentStatus = {
     paymentId: 'payment-123',
@@ -31,10 +41,17 @@ describe('GET /payments/:id/status', () => {
       recordPaymentOnChain: vi.fn(),
       waitForConfirmation: vi.fn(),
       estimateGasCost: vi.fn(),
+      isChainSupported: vi.fn().mockReturnValue(true),
+    } as any;
+
+    // Mock PaymentService
+    paymentService = {
+      findByHash: vi.fn().mockResolvedValue(mockPaymentData),
+      updateStatusByHash: vi.fn().mockResolvedValue(mockPaymentData),
     } as any;
 
     // 실제 라우트 등록
-    await getPaymentStatusRoute(app, blockchainService);
+    await getPaymentStatusRoute(app, blockchainService, paymentService);
   });
 
   describe('정상 케이스', () => {
@@ -47,7 +64,8 @@ describe('GET /payments/:id/status', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
-      expect(body.data).toEqual(mockPaymentStatus);
+      expect(body.data.paymentId).toBe(mockPaymentStatus.paymentId);
+      expect(body.data.payment_hash).toBe(mockPaymentData.payment_hash);
     });
 
     it('응답에 결제의 모든 필드가 포함되어야 함', async () => {
@@ -61,20 +79,17 @@ describe('GET /payments/:id/status', () => {
       const data = body.data;
 
       expect(data).toHaveProperty('paymentId');
-      expect(data).toHaveProperty('userId');
-      expect(data).toHaveProperty('amount');
-      expect(data).toHaveProperty('tokenAddress');
-      expect(data).toHaveProperty('tokenSymbol');
-      expect(data).toHaveProperty('recipientAddress');
+      expect(data).toHaveProperty('payment_hash');
+      expect(data).toHaveProperty('network_id');
+      expect(data).toHaveProperty('token_symbol');
       expect(data).toHaveProperty('status');
-      expect(data).toHaveProperty('createdAt');
-      expect(data).toHaveProperty('updatedAt');
     });
   });
 
   describe('경계 케이스', () => {
     it('존재하지 않는 결제 ID일 때 404 상태 코드를 반환해야 함', async () => {
-      blockchainService.getPaymentStatus = vi.fn().mockResolvedValueOnce(null);
+      // paymentService.findByHash가 null을 반환하면 404
+      paymentService.findByHash = vi.fn().mockResolvedValueOnce(null);
 
       const response = await app.inject({
         method: 'GET',
@@ -122,6 +137,11 @@ describe('GET /payments/:id/status', () => {
       ];
 
       for (const status of statuses) {
+        // Reset mocks for each iteration
+        paymentService.findByHash = vi.fn().mockResolvedValueOnce({
+          ...mockPaymentData,
+          status: status.toUpperCase(),
+        });
         blockchainService.getPaymentStatus = vi
           .fn()
           .mockResolvedValueOnce({
@@ -136,7 +156,8 @@ describe('GET /payments/:id/status', () => {
 
         expect(response.statusCode).toBe(200);
         const body = JSON.parse(response.body);
-        expect(body.data.status).toBe(status);
+        // DB status is returned (uppercase)
+        expect(body.data.status).toBe(status.toUpperCase());
       }
     });
   });

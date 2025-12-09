@@ -11,8 +11,21 @@ describe('PaymentMethodService', () => {
   let tokenService: TokenService;
   let chainService: ChainService;
   let prisma: ReturnType<typeof getPrismaClient>;
-  let merchantId: string;
-  let tokenId: string;
+  let merchantId: number;
+  let chainId: number;
+  let tokenCounter = 0;
+  const TEST_NETWORK_ID = 99003; // Unique network ID for this test suite
+
+  const createUniqueToken = async () => {
+    tokenCounter++;
+    const token = await tokenService.create({
+      chain_id: chainId,
+      address: `0x${tokenCounter.toString().padStart(40, 'a')}`,
+      symbol: `TKN${tokenCounter}`,
+      decimals: 18,
+    });
+    return token.id;
+  };
 
   beforeAll(async () => {
     prisma = getPrismaClient();
@@ -21,48 +34,44 @@ describe('PaymentMethodService', () => {
     tokenService = new TokenService(prisma);
     chainService = new ChainService(prisma);
 
-    // Clean up before tests
-    await prisma.merchantPaymentMethod.deleteMany({});
-    await prisma.token.deleteMany({});
-    await prisma.merchant.deleteMany({});
-    await prisma.chain.deleteMany({});
+    // Clean up only test-specific data - first delete existing chain if any
+    const existingChain = await prisma.chain.findFirst({ where: { network_id: TEST_NETWORK_ID } });
+    if (existingChain) {
+      await prisma.merchantPaymentMethod.deleteMany({});
+      await prisma.token.deleteMany({ where: { chain_id: existingChain.id } });
+      await prisma.merchant.deleteMany({ where: { merchant_key: { startsWith: 'pm_test_' } } });
+      await prisma.chain.delete({ where: { id: existingChain.id } });
+    }
 
     // Create test merchant
     const merchant = await merchantService.create({
-      merchant_key: 'test_merchant',
-      name: 'Test Merchant',
-      api_key: 'test_api_key',
+      merchant_key: 'pm_test_merchant',
+      name: 'PM Test Merchant',
+      api_key: 'pm_test_api_key',
     });
     merchantId = merchant.id;
 
     // Create test chain
     const chain = await chainService.create({
-      network_id: 31337,
-      name: 'Hardhat',
+      network_id: TEST_NETWORK_ID,
+      name: 'PMTestChain',
       rpc_url: 'http://localhost:8545',
       is_testnet: true,
     });
-
-    // Create test token
-    const token = await tokenService.create({
-      chain_id: chain.id,
-      address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-      symbol: 'USDC',
-      decimals: 6,
-    });
-    tokenId = token.id;
+    chainId = chain.id;
   });
 
   afterAll(async () => {
-    // Clean up after tests
+    // Clean up only test-specific data
     await prisma.merchantPaymentMethod.deleteMany({});
-    await prisma.token.deleteMany({});
-    await prisma.merchant.deleteMany({});
-    await prisma.chain.deleteMany({});
+    await prisma.token.deleteMany({ where: { chain_id: chainId } });
+    await prisma.merchant.deleteMany({ where: { merchant_key: { startsWith: 'pm_test_' } } });
+    await prisma.chain.deleteMany({ where: { network_id: TEST_NETWORK_ID } });
     await disconnectPrisma();
   });
 
   it('should create a new payment method', async () => {
+    const tokenId = await createUniqueToken();
     const methodData = {
       merchant_id: merchantId,
       token_id: tokenId,
@@ -74,12 +83,13 @@ describe('PaymentMethodService', () => {
     expect(result).toBeDefined();
     expect(result.merchant_id).toBe(merchantId);
     expect(result.token_id).toBe(tokenId);
-    expect(result.recipient_address).toBe('0x742d35Cc6634C0532925a3b844Bc029e4b2A69e2');
+    expect(result.recipient_address.toLowerCase()).toBe('0x742d35Cc6634C0532925a3b844Bc029e4b2A69e2'.toLowerCase());
     expect(result.is_enabled).toBe(true);
     expect(result.is_deleted).toBe(false);
   });
 
   it('should find payment method by ID', async () => {
+    const tokenId = await createUniqueToken();
     const methodData = {
       merchant_id: merchantId,
       token_id: tokenId,
@@ -94,6 +104,7 @@ describe('PaymentMethodService', () => {
   });
 
   it('should find payment method by merchant and token', async () => {
+    const tokenId = await createUniqueToken();
     const methodData = {
       merchant_id: merchantId,
       token_id: tokenId,
@@ -114,21 +125,24 @@ describe('PaymentMethodService', () => {
 
     // Create a second merchant for comparison
     const merchant2 = await merchantService.create({
-      merchant_key: 'test_merchant_2',
-      name: 'Test Merchant 2',
-      api_key: 'test_api_key_2',
+      merchant_key: 'pm_test_merchant_2',
+      name: 'PM Test Merchant 2',
+      api_key: 'pm_test_api_key_2',
     });
+
+    const tokenId1 = await createUniqueToken();
+    const tokenId2 = await createUniqueToken();
 
     await paymentMethodService.create({
       merchant_id: merchantId,
-      token_id: tokenId,
-      recipient_address: '0x111111111111111111111111111111111111',
+      token_id: tokenId1,
+      recipient_address: '0x1111111111111111111111111111111111111111',
     });
 
     await paymentMethodService.create({
       merchant_id: merchant2.id,
-      token_id: tokenId,
-      recipient_address: '0x222222222222222222222222222222222222',
+      token_id: tokenId2,
+      recipient_address: '0x2222222222222222222222222222222222222222',
     });
 
     const result = await paymentMethodService.findAllForMerchant(merchantId);
@@ -140,26 +154,28 @@ describe('PaymentMethodService', () => {
   });
 
   it('should update payment method', async () => {
+    const tokenId = await createUniqueToken();
     const methodData = {
       merchant_id: merchantId,
       token_id: tokenId,
-      recipient_address: '0x333333333333333333333333333333333333',
+      recipient_address: '0x3333333333333333333333333333333333333333',
     };
 
     const created = await paymentMethodService.create(methodData);
 
     const updated = await paymentMethodService.update(created.id, {
-      recipient_address: '0x444444444444444444444444444444444444',
+      recipient_address: '0x4444444444444444444444444444444444444444',
     });
 
-    expect(updated.recipient_address).toBe('0x444444444444444444444444444444444444');
+    expect(updated.recipient_address.toLowerCase()).toBe('0x4444444444444444444444444444444444444444'.toLowerCase());
   });
 
   it('should soft delete payment method', async () => {
+    const tokenId = await createUniqueToken();
     const methodData = {
       merchant_id: merchantId,
       token_id: tokenId,
-      recipient_address: '0x555555555555555555555555555555555555',
+      recipient_address: '0x5555555555555555555555555555555555555555',
     };
 
     const created = await paymentMethodService.create(methodData);
@@ -171,23 +187,26 @@ describe('PaymentMethodService', () => {
   });
 
   it('should return null for non-existent payment method', async () => {
-    const result = await paymentMethodService.findById('non_existent_id');
+    const result = await paymentMethodService.findById(999999);
     expect(result).toBeNull();
   });
 
   it('should exclude deleted payment methods from findAll', async () => {
     await prisma.merchantPaymentMethod.deleteMany({});
 
+    const tokenId1 = await createUniqueToken();
+    const tokenId2 = await createUniqueToken();
+
     const method1 = await paymentMethodService.create({
       merchant_id: merchantId,
-      token_id: tokenId,
-      recipient_address: '0x666666666666666666666666666666666666',
+      token_id: tokenId1,
+      recipient_address: '0x6666666666666666666666666666666666666666',
     });
 
     const method2 = await paymentMethodService.create({
       merchant_id: merchantId,
-      token_id: tokenId,
-      recipient_address: '0x777777777777777777777777777777777777',
+      token_id: tokenId2,
+      recipient_address: '0x7777777777777777777777777777777777777777',
     });
 
     await paymentMethodService.softDelete(method2.id);
