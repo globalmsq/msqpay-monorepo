@@ -15,6 +15,12 @@ services:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - msqpay-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppass"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   # Redis 7 Alpine - Caching
   redis:
@@ -83,9 +89,12 @@ services:
       GATEWAY_ADDRESS: "0x2256bedB57869AF4fadF16e1ebD534A7d47513d7"
       TOKEN_ADDRESS: "0xE4C687167705Abf55d709395f92e254bdF5825a2"
     depends_on:
-      - mysql
-      - redis
-      - simple-defender
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      simple-defender:
+        condition: service_healthy
     networks:
       - msqpay-network
 
