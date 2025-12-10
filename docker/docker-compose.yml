@@ -136,11 +136,12 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: development
-      # Chain ID (서버 런타임 환경변수 - docker-compose 전환에 사용)
-      # ⚠️ CHAIN_ID는 NEXT_PUBLIC_ 접두사 없이 사용 (빌드타임 인라인 방지)
+      # Chain Configuration (서버 런타임 환경변수 - /api/config에서 클라이언트에 전달)
+      # RPC_URL은 브라우저에서 접근 가능한 URL 사용 (Docker 내부 이름 아님)
       CHAIN_ID: 31337
-      # Legacy: NEXT_PUBLIC_CHAIN_ID는 유지하되 CHAIN_ID가 우선 적용됨
-      NEXT_PUBLIC_CHAIN_ID: 31337
+      RPC_URL: http://localhost:8545
+      CHAIN_NAME: Hardhat
+      # API URLs
       NEXT_PUBLIC_API_URL: http://localhost:3001
       # Server-side API URL (Docker internal network)
       MSQPAY_API_URL: http://server:3001

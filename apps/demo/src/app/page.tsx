@@ -8,9 +8,11 @@ import { PaymentHistory, PaymentHistoryRef } from "@/components/PaymentHistory";
 import { Toast } from "@/components/Toast";
 import { PAYMENT_HISTORY_REFRESH_DELAY } from "@/lib/constants";
 import { PRODUCTS } from "@/lib/products";
+import { useChainConfig } from "@/app/providers";
 
 export default function Home() {
   const { isConnected } = useAccount();
+  const chainConfig = useChainConfig();
 
   // Toast state
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
@@ -46,7 +48,19 @@ export default function Home() {
             Blockchain Payment Gateway
           </p>
         </div>
-        <ConnectButton />
+        <div className="flex items-center gap-4">
+          {/* Current chain info (read-only) */}
+          {chainConfig && (
+            <div className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm">
+              <span className="text-gray-500 dark:text-gray-400">Network: </span>
+              <span className="font-medium text-gray-700 dark:text-gray-300">
+                {chainConfig.chainName}
+              </span>
+            </div>
+          )}
+          {/* Wallet connect button (chain switcher hidden) */}
+          <ConnectButton chainStatus="none" showBalance={false} />
+        </div>
       </header>
 
       {/* Main content */}
@@ -101,7 +115,7 @@ export default function Home() {
             <p className="text-gray-500 dark:text-gray-400 mb-4">
               Connect your wallet to start making payments
             </p>
-            <ConnectButton />
+            <ConnectButton chainStatus="none" />
           </div>
         )}
       </div>
