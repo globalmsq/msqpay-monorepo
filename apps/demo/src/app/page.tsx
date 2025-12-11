@@ -59,7 +59,7 @@ export default function Home() {
             </div>
           )}
           {/* Wallet connect button (chain switcher hidden) */}
-          <ConnectButton chainStatus="none" showBalance={false} />
+          <ConnectButton chainStatus="icon" showBalance={false} />
         </div>
       </header>
 
@@ -115,7 +115,7 @@ export default function Home() {
             <p className="text-gray-500 dark:text-gray-400 mb-4">
               Connect your wallet to start making payments
             </p>
-            <ConnectButton chainStatus="none" />
+            <ConnectButton chainStatus="icon" />
           </div>
         )}
       </div>
