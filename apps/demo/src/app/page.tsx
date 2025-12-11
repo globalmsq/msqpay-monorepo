@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useAccount } from "wagmi";
+import { useAccount, useDisconnect } from "wagmi";
 import { ProductCard } from "@/components/ProductCard";
 import { PaymentHistory, PaymentHistoryRef } from "@/components/PaymentHistory";
 import { Toast } from "@/components/Toast";
@@ -11,8 +11,19 @@ import { PRODUCTS } from "@/lib/products";
 import { useChainConfig } from "@/app/providers";
 
 export default function Home() {
-  const { isConnected } = useAccount();
+  const { isConnected, chain } = useAccount();
   const chainConfig = useChainConfig();
+  const { disconnect } = useDisconnect();
+  const walletChainId = chain?.id;
+
+  // Auto-disconnect if connected to wrong or unsupported network
+  useEffect(() => {
+    if (!chainConfig || !isConnected) return;
+    // Disconnect if on unsupported chain (undefined) or wrong chain
+    if (walletChainId === undefined || walletChainId !== chainConfig.chainId) {
+      disconnect();
+    }
+  }, [chainConfig, walletChainId, isConnected, disconnect]);
 
   // Toast state
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
