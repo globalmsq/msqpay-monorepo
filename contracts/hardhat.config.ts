@@ -52,8 +52,17 @@ const config: HardhatUserConfig = {
     } : {}),
   },
   etherscan: {
-    // Etherscan API v2: Single key works for all supported chains
     apiKey: ETHERSCAN_API_KEY,
+    customChains: [
+      {
+        network: "amoy",
+        chainId: 80002,
+        urls: {
+          apiURL: "https://api-amoy.polygonscan.com/api",
+          browserURL: "https://amoy.polygonscan.com",
+        },
+      },
+    ],
   },
   gasReporter: {
     enabled: process.env.REPORT_GAS !== undefined,
