@@ -1,0 +1,5 @@
+{
+  "PaymentGateway#ERC2771Forwarder": "0x0d9A0fAf9a8101368aa01B88442B38f82180520E",
+  "PaymentGateway#PaymentGatewayV1": "0xDc40C3735163fEd63c198c3920B65B66DB54b1Bf",
+  "PaymentGateway#PaymentGatewayProxy": "0x2256bedB57869AF4fadF16e1ebD534A7d47513d7"
+}

@@ -1,7 +1,29 @@
 import { createPublicClient, http, defineChain, PublicClient, Address, parseAbiItem } from 'viem';
 import { PaymentStatus } from '../schemas/payment.schema';
-import { ChainConfig, ChainsConfig, TokenConfig } from '../config/chains.config';
+import { ChainWithTokens } from './chain.service';
 import { createLogger } from '../lib/logger';
+
+/**
+ * 내부 체인 설정 타입 (DB에서 로드된 데이터 기반)
+ */
+interface InternalChainConfig {
+  chainId: number;
+  name: string;
+  rpcUrl: string;
+  contracts: {
+    gateway: string;
+    forwarder: string;
+  };
+  tokens: Record<string, { address: string; decimals: number }>;
+}
+
+/**
+ * 토큰 설정 타입
+ */
+export interface TokenConfig {
+  address: string;
+  decimals: number;
+}
 
 /**
  * 결제 이력 아이템 인터페이스
@@ -83,34 +105,68 @@ export interface TransactionStatus {
 
 /**
  * 블록체인 서비스 - viem을 통한 스마트 컨트랙트 상호작용
- * 멀티체인 + 멀티토큰 아키텍처: JSON 설정 기반 동적 체인 관리
+ * 멀티체인 + 멀티토큰 아키텍처: DB 기반 동적 체인 관리
  */
 export class BlockchainService {
   private clients: Map<number, PublicClient> = new Map();
-  private chainConfigs: Map<number, ChainConfig> = new Map();
+  private chainConfigs: Map<number, InternalChainConfig> = new Map();
   private readonly logger = createLogger('BlockchainService');
 
-  constructor(config: ChainsConfig) {
-    for (const chainConfig of config.chains) {
+  /**
+   * DB에서 로드한 체인 데이터로 BlockchainService 초기화
+   * @param chainsWithTokens ChainService.findAllWithTokens()의 결과
+   */
+  constructor(chainsWithTokens: ChainWithTokens[]) {
+    for (const chainData of chainsWithTokens) {
+      // gateway_address, forwarder_address가 없는 체인은 건너뜀
+      if (!chainData.gateway_address || !chainData.forwarder_address) {
+        this.logger.warn(`⚠️ Chain ${chainData.name} (${chainData.network_id}) skipped: missing contract addresses`);
+        continue;
+      }
+
+      // 토큰을 symbol -> { address, decimals } 맵으로 변환
+      const tokensMap: Record<string, { address: string; decimals: number }> = {};
+      for (const token of chainData.tokens) {
+        tokensMap[token.symbol] = {
+          address: token.address,
+          decimals: token.decimals,
+        };
+      }
+
+      const internalConfig: InternalChainConfig = {
+        chainId: chainData.network_id,
+        name: chainData.name,
+        rpcUrl: chainData.rpc_url,
+        contracts: {
+          gateway: chainData.gateway_address,
+          forwarder: chainData.forwarder_address,
+        },
+        tokens: tokensMap,
+      };
+
       // viem defineChain으로 동적 체인 정의
       const chain = defineChain({
-        id: chainConfig.chainId,
-        name: chainConfig.name,
-        nativeCurrency: chainConfig.nativeCurrency,
+        id: chainData.network_id,
+        name: chainData.name,
+        nativeCurrency: {
+          name: 'Native',
+          symbol: 'ETH',
+          decimals: 18,
+        },
         rpcUrls: {
-          default: { http: [chainConfig.rpcUrl] },
+          default: { http: [chainData.rpc_url] },
         },
       });
 
       const client = createPublicClient({
         chain,
-        transport: http(chainConfig.rpcUrl),
+        transport: http(chainData.rpc_url),
       });
 
-      this.clients.set(chainConfig.chainId, client);
-      this.chainConfigs.set(chainConfig.chainId, chainConfig);
+      this.clients.set(chainData.network_id, client);
+      this.chainConfigs.set(chainData.network_id, internalConfig);
 
-      this.logger.info(`🔗 Chain ${chainConfig.name} (${chainConfig.chainId}) initialized: ${chainConfig.rpcUrl}`);
+      this.logger.info(`🔗 Chain ${chainData.name} (${chainData.network_id}) initialized: ${chainData.rpc_url}`);
     }
   }
 
@@ -131,7 +187,7 @@ export class BlockchainService {
   /**
    * 체인 설정 조회
    */
-  getChainConfig(chainId: number): ChainConfig {
+  getChainConfig(chainId: number): InternalChainConfig {
     const config = this.chainConfigs.get(chainId);
     if (!config) {
       throw new Error(`Unsupported chain: ${chainId}`);

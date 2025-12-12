@@ -22,6 +22,8 @@ export interface CreatePaymentParams {
   recipientAddress: string;
   /** 결제 토큰 컨트랙트 주소 */
   tokenAddress: string;
+  /** 토큰 소수점 자릿수 */
+  tokenDecimals: number;
 }
 
 /**

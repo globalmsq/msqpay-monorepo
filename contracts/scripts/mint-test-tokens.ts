@@ -5,8 +5,8 @@ import { ethers } from "hardhat";
  * This script is executed automatically by docker-compose after contract deployment
  */
 async function main() {
-  // MockERC20 (TEST) token address - Hardhat deterministic
-  const TOKEN_ADDRESS = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
+  // MockERC20 (TEST) token address - Hardhat deterministic (first contract deployed)
+  const TOKEN_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
   // Test user account (Hardhat Account #3)
   const TEST_USER_ADDRESS = "0x90F79bf6EB2c4f870365E785982E1f101E93b906";
   const MINT_AMOUNT = ethers.parseUnits("1000000", 18); // 1,000,000 TEST

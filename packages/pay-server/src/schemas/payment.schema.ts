@@ -13,6 +13,7 @@ export const CreatePaymentSchema = z.object({
   recipientAddress: z
     .string()
     .regex(/^0x[a-fA-F0-9]{40}$/, '유효한 Ethereum 주소여야 합니다 (0x + 40자 hex)'),
+  tokenDecimals: z.number().int().min(0).max(18, '토큰 소수점은 0-18 사이여야 합니다'),
 });
 
 export type CreatePaymentRequest = z.infer<typeof CreatePaymentSchema>;

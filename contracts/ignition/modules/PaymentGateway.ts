@@ -7,7 +7,10 @@ import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
  * 1. ERC2771Forwarder - Trusted forwarder for meta-transactions
  * 2. PaymentGatewayV1 - Implementation contract
  * 3. ERC1967Proxy - Proxy contract pointing to implementation
- * 4. MockERC20 - Test token for local development
+ *
+ * Note: MockERC20 is deployed separately via MockERC20.ts module
+ * because Ignition's m.getParameter() returns Future objects,
+ * making conditional deployment (if chainId === 31337) impossible.
  */
 const PaymentGatewayModule = buildModule("PaymentGateway", (m) => {
   // Get deployment parameters
@@ -29,14 +32,10 @@ const PaymentGatewayModule = buildModule("PaymentGateway", (m) => {
     id: "PaymentGatewayProxy",
   });
 
-  // Deploy MockERC20 for testing (only for local/testnet)
-  const mockToken = m.contract("MockERC20", ["Test Token", "TEST", 18]);
-
   return {
     forwarder,
     implementation,
     proxy,
-    mockToken,
   };
 });
 

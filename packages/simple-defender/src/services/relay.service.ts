@@ -115,10 +115,15 @@ export class RelayService {
   private config: RelayServiceConfig;
 
   constructor(config: RelayServiceConfig) {
-    this.config = config;
-    this.validateConfig(config);
+    // Normalize private key: add 0x prefix if missing
+    const normalizedConfig = {
+      ...config,
+      relayerPrivateKey: this.normalizeHexString(config.relayerPrivateKey) as `0x${string}`,
+    };
+    this.config = normalizedConfig;
+    this.validateConfig(normalizedConfig);
 
-    this.relayerAccount = privateKeyToAccount(config.relayerPrivateKey);
+    this.relayerAccount = privateKeyToAccount(normalizedConfig.relayerPrivateKey);
 
     const chain = {
       ...hardhat,
@@ -137,9 +142,24 @@ export class RelayService {
     });
   }
 
+  /**
+   * Normalize hex string by adding 0x prefix if missing
+   */
+  private normalizeHexString(value: string): string {
+    if (!value) return value;
+    return value.startsWith('0x') ? value : `0x${value}`;
+  }
+
   private validateConfig(config: RelayServiceConfig): void {
-    if (!config.relayerPrivateKey?.startsWith('0x')) {
-      throw new Error('relayerPrivateKey must be hex string starting with 0x');
+    if (!config.relayerPrivateKey) {
+      throw new Error('relayerPrivateKey is required');
+    }
+    // After normalization, should start with 0x and be 66 chars (0x + 64 hex chars)
+    if (!config.relayerPrivateKey.startsWith('0x') || config.relayerPrivateKey.length !== 66) {
+      throw new Error('relayerPrivateKey must be a valid 32-byte hex string');
+    }
+    if (!/^0x[0-9a-fA-F]{64}$/.test(config.relayerPrivateKey)) {
+      throw new Error('relayerPrivateKey contains invalid hex characters');
     }
     if (!config.rpcUrl) {
       throw new Error('rpcUrl is required');

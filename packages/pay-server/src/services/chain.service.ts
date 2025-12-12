@@ -1,17 +1,25 @@
-import { PrismaClient, Chain } from '@prisma/client';
+import { PrismaClient, Chain, Token } from '@prisma/client';
 
 export interface CreateChainInput {
   network_id: number;
   name: string;
   rpc_url: string;
+  gateway_address?: string;
+  forwarder_address?: string;
   is_testnet?: boolean;
 }
 
 export interface UpdateChainInput {
   name?: string;
   rpc_url?: string;
+  gateway_address?: string;
+  forwarder_address?: string;
   is_testnet?: boolean;
   is_enabled?: boolean;
+}
+
+export interface ChainWithTokens extends Chain {
+  tokens: Token[];
 }
 
 export class ChainService {
@@ -23,6 +31,8 @@ export class ChainService {
         network_id: input.network_id,
         name: input.name,
         rpc_url: input.rpc_url,
+        gateway_address: input.gateway_address,
+        forwarder_address: input.forwarder_address,
         is_testnet: input.is_testnet || false,
         is_enabled: true,
         is_deleted: false,
@@ -83,5 +93,37 @@ export class ChainService {
         deleted_at: new Date(),
       },
     });
+  }
+
+  /**
+   * 모든 활성화된 체인과 해당 토큰 정보를 함께 조회
+   * BlockchainService 초기화에 사용
+   */
+  async findAllWithTokens(): Promise<ChainWithTokens[]> {
+    const chains = await this.prisma.chain.findMany({
+      where: {
+        is_deleted: false,
+        is_enabled: true,
+        gateway_address: { not: null },
+        forwarder_address: { not: null },
+      },
+      orderBy: { created_at: 'asc' },
+    });
+
+    // 각 체인에 대해 토큰 조회
+    const chainsWithTokens: ChainWithTokens[] = await Promise.all(
+      chains.map(async (chain) => {
+        const tokens = await this.prisma.token.findMany({
+          where: {
+            chain_id: chain.id,
+            is_deleted: false,
+            is_enabled: true,
+          },
+        });
+        return { ...chain, tokens };
+      })
+    );
+
+    return chainsWithTokens;
   }
 }

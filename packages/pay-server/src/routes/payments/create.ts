@@ -17,6 +17,7 @@ export interface CreatePaymentRequest {
   chainId: number;
   tokenAddress: string;
   recipientAddress: string;
+  tokenDecimals: number;
 }
 
 export async function createPaymentRoute(
@@ -116,8 +117,8 @@ export async function createPaymentRoute(
         });
       }
 
-      // amount를 wei로 변환 (설정된 decimals 사용)
-      const amountInWei = parseUnits(validatedData.amount.toString(), tokenConfig.decimals);
+      // amount를 wei로 변환 (상점서버가 보낸 tokenDecimals 사용)
+      const amountInWei = parseUnits(validatedData.amount.toString(), validatedData.tokenDecimals);
 
       // 체인 컨트랙트 정보 조회
       const contracts = blockchainService.getChainContracts(validatedData.chainId);

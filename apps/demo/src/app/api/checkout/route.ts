@@ -112,6 +112,7 @@ export async function POST(request: NextRequest) {
 
     // 결제 서버에 결제 생성 요청
     // paymentId는 결제 서버에서 생성됨
+    // CHAIN_CONFIGS의 모든 필드를 전송 (tokenDecimals 포함)
     const payment = await client.createPayment({
       merchantId: merchantConfig.merchantId,
       orderId: orderId,
@@ -120,6 +121,7 @@ export async function POST(request: NextRequest) {
       chainId: merchantConfig.chainId,
       recipientAddress: merchantConfig.recipientAddress,
       tokenAddress: merchantConfig.tokenAddress,
+      tokenDecimals: merchantConfig.tokenDecimals,
     });
 
     // 클라이언트에 결제 정보 반환

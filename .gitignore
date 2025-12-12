@@ -12,7 +12,6 @@ out/
 cache/
 artifacts/
 typechain-types/
-contracts/ignition/deployments/
 
 # Environment
 .env

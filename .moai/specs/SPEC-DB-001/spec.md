@@ -7,7 +7,7 @@
 | ID | SPEC-DB-001 |
 | 제목 | Pay-Server 데이터베이스 통합 (Prisma + MySQL + Redis) |
 | 우선순위 | HIGH |
-| 상태 | Implemented |
+| 상태 | completed |
 | 생성일 | 2025-12-03 |
 | 수정일 | 2025-12-09 |
 | 도메인 | Backend / Infrastructure |

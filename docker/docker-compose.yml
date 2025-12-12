@@ -15,6 +15,12 @@ services:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - msqpay-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppass"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   # Redis 7 Alpine - Caching
   redis:
@@ -39,6 +45,7 @@ services:
     command: >
       sh -c "npx hardhat node --hostname 0.0.0.0 &
              sleep 5 &&
+             npx hardhat ignition deploy ./ignition/modules/MockERC20.ts --network localhost &&
              npx hardhat ignition deploy ./ignition/modules/PaymentGateway.ts --network localhost &&
              npx hardhat run scripts/mint-test-tokens.ts --network localhost &&
              wait"
@@ -63,13 +70,14 @@ services:
       RELAYER_PRIVATE_KEY: "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
       RPC_URL: http://hardhat:8545
       CHAIN_ID: 31337
-      FORWARDER_ADDRESS: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+      # ERC2771Forwarder address (second contract deployed after MockERC20)
+      FORWARDER_ADDRESS: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
     depends_on:
       - hardhat
     networks:
       - msqpay-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3001/health"]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -101,14 +109,19 @@ services:
       # Relayer address (Hardhat Account #2)
       RELAYER_ADDRESS: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
       # Contract addresses (Hardhat deterministic)
-      FORWARDER_ADDRESS: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+      # Deployment order: MockERC20 → Forwarder → GatewayV1 → Proxy
+      TOKEN_ADDRESS: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+      FORWARDER_ADDRESS: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
       GATEWAY_ADDRESS: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
-      TOKEN_ADDRESS: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
     depends_on:
-      - mysql
-      - redis
-      - hardhat
-      - simple-defender
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      hardhat:
+        condition: service_started
+      simple-defender:
+        condition: service_healthy
     networks:
       - msqpay-network
 
@@ -123,12 +136,12 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: development
-      # Contract addresses (Hardhat deterministic)
-      NEXT_PUBLIC_FORWARDER_ADDRESS: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
-      NEXT_PUBLIC_GATEWAY_ADDRESS: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
-      NEXT_PUBLIC_TOKEN_ADDRESS: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
-      NEXT_PUBLIC_CHAIN_ID: 31337
-      NEXT_PUBLIC_RPC_URL: http://localhost:8545
+      # Chain Configuration (서버 런타임 환경변수 - /api/config에서 클라이언트에 전달)
+      # RPC_URL은 브라우저에서 접근 가능한 URL 사용 (Docker 내부 이름 아님)
+      CHAIN_ID: 31337
+      RPC_URL: http://localhost:8545
+      CHAIN_NAME: Hardhat
+      # API URLs
       NEXT_PUBLIC_API_URL: http://localhost:3001
       # Server-side API URL (Docker internal network)
       MSQPAY_API_URL: http://server:3001

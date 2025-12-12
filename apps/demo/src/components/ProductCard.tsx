@@ -17,7 +17,6 @@ interface Product {
 
 interface ProductCardProps {
   product: Product;
-  tokenSymbol: string;
   disabled?: boolean;
   onPaymentSuccess?: (txHash: string) => void;
 }
@@ -26,11 +25,10 @@ interface ProductCardProps {
  * 상품 카드 컴포넌트
  *
  * 가격 표시:
- * - 상품 가격은 상점 토큰 단위로 표시
- * - 실제 토큰 심볼은 checkout 시점에 서버에서 제공
- * - 여기서는 단순히 숫자만 표시 (단위 없음)
+ * - 상품 가격은 토큰 단위 숫자로만 표시
+ * - 실제 토큰 심볼은 PaymentModal에서 checkout 응답으로 제공
  */
-export function ProductCard({ product, tokenSymbol, disabled, onPaymentSuccess }: ProductCardProps) {
+export function ProductCard({ product, disabled, onPaymentSuccess }: ProductCardProps) {
   const [showPayment, setShowPayment] = useState(false);
 
   return (
@@ -55,7 +53,7 @@ export function ProductCard({ product, tokenSymbol, disabled, onPaymentSuccess }
 
           <div className="flex justify-between items-center">
             <div className="text-xl font-bold text-primary-600">
-              {product.price} {tokenSymbol}
+              {product.price} TOKEN
             </div>
             <button
               onClick={() => setShowPayment(true)}
