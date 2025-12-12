@@ -4,11 +4,12 @@
 
 - SPEC-ID: SPEC-DEPLOY-001
 - Title: 멀티체인 컨트랙트 배포 및 주소 관리 시스템
-- Status: draft
+- Status: completed
 - Priority: High
-- Version: 1.2.0
+- Version: 1.3.0
 - Created: 2025-12-09
-- Updated: 2025-12-09
+- Updated: 2025-12-12
+- Completed: 2025-12-12
 - Author: System Architect
 
 ## 개요
@@ -373,6 +374,13 @@ BSCSCAN_API_KEY=...
 - REQ-004 → hardhat ignition verify 명령
 
 ## 변경 이력
+
+### v1.3.0 (2025-12-12)
+
+- SPEC 상태 completed로 변경
+- Polygon Amoy 배포 완료
+- Etherscan API v2 단일 키 방식으로 구현 단순화
+- 동적 RPC_URL/CHAIN_ID 환경변수 방식으로 구현
 
 ### v1.2.0 (2025-12-09)
 
