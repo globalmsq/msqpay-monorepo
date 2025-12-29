@@ -1,3 +1,5 @@
+name: msqpay
+
 services:
   # MySQL 8.0 - Payment Data
   mysql:
@@ -33,26 +35,7 @@ services:
     networks:
       - msqpay-network
 
-  # Hardhat Local Blockchain + Contract Deployment
-  hardhat:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.packages
-      target: hardhat
-    container_name: msqpay-hardhat
-    ports:
-      - "8545:8545"
-    command: >
-      sh -c "npx hardhat node --hostname 0.0.0.0 &
-             sleep 5 &&
-             npx hardhat ignition deploy ./ignition/modules/MockERC20.ts --network localhost &&
-             npx hardhat ignition deploy ./ignition/modules/PaymentGateway.ts --network localhost &&
-             npx hardhat run scripts/mint-test-tokens.ts --network localhost &&
-             wait"
-    networks:
-      - msqpay-network
-
-  # Simple Relayer Service (Local gasless transaction relay)
+  # Simple Relayer Service (Gasless transaction relay for Amoy)
   simple-relayer:
     build:
       context: ..
@@ -65,15 +48,11 @@ services:
       NODE_ENV: development
       HOST: 0.0.0.0
       PORT: 3001
-      # Hardhat private key #2 (Account #2, deterministic - for local dev only)
-      # Address: 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
-      RELAYER_PRIVATE_KEY: "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
-      RPC_URL: http://hardhat:8545
-      CHAIN_ID: 31337
-      # ERC2771Forwarder address (second contract deployed after MockERC20)
-      FORWARDER_ADDRESS: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
-    depends_on:
-      - hardhat
+      # TODO: Set your relayer private key (DO NOT COMMIT!)
+      RELAYER_PRIVATE_KEY: "${RELAYER_PRIVATE_KEY}"
+      RPC_URL: https://rpc-amoy.polygon.technology
+      CHAIN_ID: 80002
+      FORWARDER_ADDRESS: "0x0d9A0fAf9a8101368aa01B88442B38f82180520E"
     networks:
       - msqpay-network
     healthcheck:
@@ -102,23 +81,19 @@ services:
       MYSQL_DATABASE: msqpay
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      BLOCKCHAIN_RPC_URL: http://hardhat:8545
+      BLOCKCHAIN_RPC_URL: https://rpc-amoy.polygon.technology
       # Simple Relayer API URL (Local gasless relay)
-      # Production: msq-relayer-service
       RELAYER_API_URL: http://simple-relayer:3001
-      # Relayer address (Hardhat Account #2)
-      RELAYER_ADDRESS: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
-      # Contract addresses (Hardhat deterministic)
-      # Deployment order: MockERC20 → Forwarder → GatewayV1 → Proxy
-      TOKEN_ADDRESS: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
-      FORWARDER_ADDRESS: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
-      GATEWAY_ADDRESS: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
+      # TODO: Set your relayer address
+      RELAYER_ADDRESS: "${RELAYER_ADDRESS}"
+      # Polygon Amoy Contract Addresses
+      FORWARDER_ADDRESS: "0x0d9A0fAf9a8101368aa01B88442B38f82180520E"
+      GATEWAY_ADDRESS: "0x2256bedB57869AF4fadF16e1ebD534A7d47513d7"
+      TOKEN_ADDRESS: "0xE4C687167705Abf55d709395f92e254bdF5825a2"
     depends_on:
       mysql:
         condition: service_healthy
       redis:
-        condition: service_started
-      hardhat:
         condition: service_started
       simple-relayer:
         condition: service_healthy
@@ -137,10 +112,9 @@ services:
     environment:
       NODE_ENV: development
       # Chain Configuration (서버 런타임 환경변수 - /api/config에서 클라이언트에 전달)
-      # RPC_URL은 브라우저에서 접근 가능한 URL 사용 (Docker 내부 이름 아님)
-      CHAIN_ID: 31337
-      RPC_URL: http://localhost:8545
-      CHAIN_NAME: Hardhat
+      CHAIN_ID: 80002
+      RPC_URL: https://rpc-amoy.polygon.technology
+      CHAIN_NAME: Polygon Amoy
       # API URLs
       NEXT_PUBLIC_API_URL: http://localhost:3001
       # Server-side API URL (Docker internal network)

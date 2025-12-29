@@ -1,0 +1,135 @@
+name: msqpay
+
+services:
+  # MySQL 8.0 - Payment Data
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: pass
+      MYSQL_DATABASE: msqpay
+      MYSQL_USER: msqpay
+      MYSQL_PASSWORD: pass
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - msqpay-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppass"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # Redis 7 Alpine - Caching
+  redis:
+    image: redis:7-alpine
+    # ports:
+    #   - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - msqpay-network
+
+  # Contract Deployment (uses external hardhat-node from msq-relayer-service)
+  # Note: hardhat-node must be running in msq-relayer-service before starting this
+  contracts-init:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.packages
+      target: hardhat
+    command: >
+      sh -c "sleep 5 && npx hardhat run scripts/check-and-deploy.ts --network localhost"
+    environment:
+      HARDHAT_NETWORK: localhost
+      RPC_URL: http://hardhat-node:8545
+      # Reuse contracts from msq-relayer-service (deployed at nonces 0-2)
+      # Setting these addresses skips MockERC20 and Forwarder deployment
+      # - TOKEN_ADDRESS set → skip MockERC20, use SampleToken
+      # - FORWARDER_ADDRESS set → skip Forwarder, reuse existing
+      TOKEN_ADDRESS: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
+      FORWARDER_ADDRESS: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+    networks:
+      - msq-network
+    restart: "no"
+
+  # Payment Server (Fastify)
+  server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.packages
+      target: server
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: msqpay
+      MYSQL_PASSWORD: pass
+      MYSQL_DATABASE: msqpay
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # External msq-relayer-service connection
+      # Requires: docker network create msq-network
+      # Requires: msq-relayer-service running with same network
+      RELAYER_API_URL: http://relay-api:8080
+      RELAYER_API_KEY: ${RELAY_API_KEY:-local-dev-api-key}
+      # Relayer address (from msq-relayer-service oz-relayer-1)
+      RELAYER_ADDRESS: ${RELAYER_ADDRESS:-0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC}
+      # Contract addresses:
+      # - TOKEN_ADDRESS: SampleToken from msq-relayer-service (nonce 1)
+      # - FORWARDER_ADDRESS: ERC2771Forwarder from msq-relayer-service (nonce 0)
+      # - GATEWAY_ADDRESS: PaymentGatewayProxy deployed by msqpay
+      #   Note: Address depends on Account #0 nonce. After fresh hardhat reset:
+      #   msq-relayer-service deploys nonces 0-2, then msqpay deploys at nonces 3-4
+      TOKEN_ADDRESS: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
+      FORWARDER_ADDRESS: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+      GATEWAY_ADDRESS: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      contracts-init:
+        condition: service_completed_successfully
+    networks:
+      - msqpay-network
+      - msq-network
+
+  # Demo App (Next.js)
+  demo:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.packages
+      target: demo
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      # Chain Configuration (서버 런타임 환경변수 - /api/config에서 클라이언트에 전달)
+      # RPC_URL은 브라우저에서 접근 가능한 URL 사용 (Docker 내부 이름 아님)
+      CHAIN_ID: 31337
+      RPC_URL: http://localhost:8545
+      CHAIN_NAME: Hardhat
+      # API URLs
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      # Server-side API URL (Docker internal network)
+      MSQPAY_API_URL: http://server:3001
+    depends_on:
+      - server
+    networks:
+      - msqpay-network
+
+networks:
+  msqpay-network:
+    driver: bridge
+  msq-network:
+    external: true
+
+volumes:
+  mysql-data:
+  redis-data:
