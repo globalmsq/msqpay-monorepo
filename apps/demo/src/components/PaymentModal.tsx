@@ -392,7 +392,7 @@ export function PaymentModal({
       // 2. Create EIP-712 typed data for gasless payment forward request
       // OZ ERC2771Forwarder expects: ForwardRequest(address from,address to,uint256 value,uint256 gas,uint256 nonce,uint48 deadline,bytes data)
       const domain = {
-        name: 'MSQPayForwarder',  // Must match deployed contract name
+        name: 'MSQForwarder',  // Must match deployed contract name
         version: '1',
         chainId: BigInt(serverConfig.chainId),
         verifyingContract: serverConfig.forwarderAddress as Address,
@@ -432,11 +432,13 @@ export function PaymentModal({
       });
 
       // 4. Create ForwardRequest with signature for relay
+      // nonce는 서명 시 사용한 값을 그대로 전달 (서버에서 재조회하면 서명 불일치)
       const forwardRequest = {
         from: address,
         to: serverConfig.gatewayAddress,
         value: '0',
         gas: '300000',
+        nonce: nonce.toString(),
         deadline: deadline.toString(),
         data: payCallData,
         signature,

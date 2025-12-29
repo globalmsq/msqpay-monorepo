@@ -44,12 +44,13 @@ export interface MerchantConfig {
  */
 const CHAIN_CONFIGS: Record<number, Omit<MerchantConfig, 'merchantId'>> = {
   // Hardhat Local (chainId: 31337)
-  // MockERC20 is first contract deployed (nonce 0)
+  // Deployment order: Forwarder (nonce 0) → Token (nonce 1)
+  // Same address as msq-relayer-service SampleToken
   31337: {
     chainId: 31337,
     recipientAddress: DEMO_MERCHANT_ADDRESS,
     tokenSymbol: 'TEST',
-    tokenAddress: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+    tokenAddress: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512',
     tokenDecimals: 18,
   },
   // Polygon Amoy (chainId: 80002)

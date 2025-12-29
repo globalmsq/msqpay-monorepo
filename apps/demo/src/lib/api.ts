@@ -223,12 +223,16 @@ export async function waitForTransaction(
 
 /**
  * ERC2771 ForwardRequest Schema
+ *
+ * nonce는 서명 시 사용한 값을 그대로 전달해야 함.
+ * 서버에서 재조회하면 서명 검증이 실패함.
  */
 export const ForwardRequestSchema = z.object({
   from: z.string().startsWith('0x').length(42, 'Invalid from address'),
   to: z.string().startsWith('0x').length(42, 'Invalid to address'),
   value: z.string(),
   gas: z.string(),
+  nonce: z.string(), // 서명 시 사용한 nonce
   deadline: z.string(),
   data: z.string().startsWith('0x', 'Data must start with 0x'),
   signature: z.string().startsWith('0x', 'Signature must start with 0x'),

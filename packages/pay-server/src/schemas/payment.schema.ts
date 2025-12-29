@@ -38,12 +38,16 @@ export type PaymentStatus = z.infer<typeof PaymentStatusSchema>;
 /**
  * ERC2771 ForwardRequest 스키마
  * OZ ERC2771Forwarder.execute()에 전달되는 파라미터
+ *
+ * nonce는 클라이언트가 서명 시 사용한 값을 그대로 전달해야 함.
+ * 서버에서 재조회하면 서명 검증이 실패함.
  */
 export const ForwardRequestSchema = z.object({
   from: z.string().startsWith('0x').length(42),
   to: z.string().startsWith('0x').length(42),
   value: z.string(),
   gas: z.string(),
+  nonce: z.string(), // 클라이언트가 서명 시 사용한 nonce
   deadline: z.string(),
   data: z.string().startsWith('0x'),
   signature: z.string().startsWith('0x'),

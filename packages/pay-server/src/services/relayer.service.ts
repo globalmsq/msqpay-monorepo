@@ -49,14 +49,13 @@ interface RelayerInfo {
 export class RelayerService {
   private readonly baseUrl: string;
   private readonly apiKey: string;
-  private readonly apiSecret: string;
   private readonly relayerAddress: Address;
   private readonly logger = createLogger('RelayerService');
 
   constructor(
     apiUrl: string,
     apiKey: string,
-    apiSecret: string,
+    _apiSecret: string, // 미사용: relay-api는 Secret 불필요, 호환성을 위해 파라미터 유지
     relayerAddress: string
   ) {
     if (!apiUrl) {
@@ -65,22 +64,23 @@ export class RelayerService {
 
     this.baseUrl = apiUrl.replace(/\/$/, ''); // 끝의 슬래시 제거
     this.apiKey = apiKey;
-    this.apiSecret = apiSecret;
     this.relayerAddress = relayerAddress as Address;
   }
 
   /**
    * HTTP 요청 헤더 생성
+   *
+   * relay-api (msq-relayer-service)는 x-api-key 헤더만 필요.
+   * Secret은 불필요하며, 헤더 이름은 소문자로 전송.
    */
   private getHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
-    // API 키가 있는 경우 인증 헤더 추가 (Production OZ Defender)
-    if (this.apiKey && this.apiSecret) {
-      headers['X-Api-Key'] = this.apiKey;
-      headers['X-Api-Secret'] = this.apiSecret;
+    // API 키가 있는 경우 인증 헤더 추가
+    if (this.apiKey) {
+      headers['x-api-key'] = this.apiKey;
     }
 
     return headers;
@@ -211,17 +211,16 @@ export class RelayerService {
     }
 
     try {
-      // nonce 조회
-      const nonce = await this.getNonce(forwardRequest.from as Address);
-
+      // 클라이언트가 서명 시 사용한 nonce를 그대로 사용
+      // 서버에서 재조회하면 서명 검증이 실패함
       const requestBody = {
         request: {
           from: forwardRequest.from,
           to: forwardRequest.to,
           value: forwardRequest.value,
           gas: forwardRequest.gas,
-          nonce: nonce,
-          deadline: parseInt(forwardRequest.deadline, 10),
+          nonce: forwardRequest.nonce,
+          deadline: forwardRequest.deadline,
           data: forwardRequest.data,
         },
         signature: forwardRequest.signature,

@@ -164,9 +164,9 @@ CREATE TABLE IF NOT EXISTS payment_events (
 -- id=5: Polygon (Mainnet) - no contracts yet
 -- id=6: Ethereum (Mainnet) - no contracts yet
 -- id=7: BNB Chain (Mainnet) - no contracts yet
--- Deployment order: MockERC20 → Forwarder → GatewayV1 → Proxy
+-- Deployment order: Forwarder → MockERC20 → GatewayV1 → Proxy
 INSERT INTO chains (network_id, name, rpc_url, gateway_address, forwarder_address, is_testnet) VALUES
-(31337, 'Localhost', 'http://hardhat:8545', '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9', '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512', TRUE),
+(31337, 'Localhost', 'http://hardhat-node:8545', '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9', '0x5FbDB2315678afecb367f032d93F642f64180aa3', TRUE),
 (11155111, 'Sepolia', 'https://ethereum-sepolia-rpc.publicnode.com', NULL, NULL, TRUE),
 (80002, 'Amoy', 'https://rpc-amoy.polygon.technology', '0x2256bedB57869AF4fadF16e1ebD534A7d47513d7', '0x0d9A0fAf9a8101368aa01B88442B38f82180520E', TRUE),
 (97, 'BNB Chain Testnet', 'https://data-seed-prebsc-1-s1.binance.org:8545', NULL, NULL, TRUE),
@@ -175,11 +175,11 @@ INSERT INTO chains (network_id, name, rpc_url, gateway_address, forwarder_addres
 (56, 'BNB Chain', 'https://bsc-dataseed.binance.org', NULL, NULL, FALSE);
 
 -- Tokens (3 tokens)
--- id=1: TEST on Localhost (chain_id=1) - MockERC20 is first deployed contract
+-- id=1: TEST on Localhost (chain_id=1) - MockERC20 is second deployed contract (nonce 1)
 -- id=2: SUT on Polygon (chain_id=5)
 -- id=3: SUT on Amoy (chain_id=3)
 INSERT INTO tokens (chain_id, address, symbol, decimals) VALUES
-(1, '0x5FbDB2315678afecb367f032d93F642f64180aa3', 'TEST', 18),
+(1, '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512', 'TEST', 18),
 (5, '0x98965474EcBeC2F532F1f780ee37b0b05F77Ca55', 'SUT', 18),
 (3, '0xE4C687167705Abf55d709395f92e254bdF5825a2', 'SUT', 18);
 
