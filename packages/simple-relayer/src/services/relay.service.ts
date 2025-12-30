@@ -22,6 +22,7 @@ export interface ForwardRequestData {
   to: `0x${string}`;
   value: string;
   gas: string;
+  nonce: string;
   deadline: string;
   data: `0x${string}`;
   signature: `0x${string}`;

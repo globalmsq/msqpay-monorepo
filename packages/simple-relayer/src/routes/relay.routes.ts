@@ -151,6 +151,7 @@ export async function relayRoutes(
             to: gaslessReq.to as `0x${string}`,
             value: gaslessReq.value,
             gas: gaslessReq.gas,
+            nonce: gaslessReq.nonce,
             deadline: gaslessReq.deadline,
             data: gaslessReq.data as `0x${string}`,
             signature: signature as `0x${string}`,
