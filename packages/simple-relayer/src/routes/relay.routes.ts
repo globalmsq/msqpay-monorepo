@@ -19,7 +19,7 @@ interface GaslessRelayRequestBody {
     value: string;
     gas: string;
     nonce: string;
-    deadline: number;
+    deadline: string;
     data: string;
   };
   signature: string;
@@ -151,7 +151,7 @@ export async function relayRoutes(
             to: gaslessReq.to as `0x${string}`,
             value: gaslessReq.value,
             gas: gaslessReq.gas,
-            deadline: gaslessReq.deadline.toString(),
+            deadline: gaslessReq.deadline,
             data: gaslessReq.data as `0x${string}`,
             signature: signature as `0x${string}`,
           },

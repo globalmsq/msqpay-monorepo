@@ -120,7 +120,7 @@ EXPOSE 3000
 CMD ["pnpm", "start"]
 
 # ============================================
-# Simple Defender Dependencies Stage
+# Simple Relayer Dependencies Stage
 # ============================================
 FROM base AS simple-relayer-deps
 
@@ -131,7 +131,7 @@ COPY packages/simple-relayer/package.json ./packages/simple-relayer/
 RUN pnpm install --frozen-lockfile --filter @msqpay/simple-relayer
 
 # ============================================
-# Simple Defender Builder Stage
+# Simple Relayer Builder Stage
 # ============================================
 FROM simple-relayer-deps AS simple-relayer-builder
 
@@ -144,7 +144,7 @@ WORKDIR /app/packages/simple-relayer
 RUN pnpm build
 
 # ============================================
-# Simple Defender Runtime Stage
+# Simple Relayer Runtime Stage
 # ============================================
 FROM base AS simple-relayer
 
